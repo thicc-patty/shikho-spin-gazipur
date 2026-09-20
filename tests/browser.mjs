@@ -1,0 +1,75 @@
+import { chromium } from "@playwright/test";
+import assert from "node:assert/strict";
+import { randomInt } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import postgres from "postgres";
+const base=process.env.ALO_TEST_URL||"http://localhost:3300";
+const shots=new URL("../.screenshots/",import.meta.url).pathname;mkdirSync(shots,{recursive:true});
+const db=postgres(process.env.DATABASE_URL,{prepare:false,max:1});
+const phone="019"+randomInt(10000000,99999999);
+const browser=await chromium.launch({headless:true});
+const context=await browser.newContext({viewport:{width:390,height:748},hasTouch:true,isMobile:true});
+const page=await context.newPage();let fixtureId;
+const errors=[];page.on("pageerror",error=>errors.push(error.message));
+const shot=async(name)=>{await page.screenshot({path:shots+name+".png",fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow at ${name}`);};
+try{
+ await page.goto(base);await page.locator('[data-ready="true"]').waitFor();
+ await shot("mobile-welcome");
+ await page.getByRole("button",{name:"চলো, শুরু করি"}).click();
+ await page.waitForFunction(()=>document.querySelector("button[type=submit]")&&!document.querySelector("button[type=submit]").disabled);
+ await page.getByRole("button",{name:"পরের ধাপ"}).click();
+ assert.equal(await page.locator(".field-error").count(),2);
+ await page.getByLabel("তোমার নাম",{exact:true}).fill("আরিফ");
+ await page.getByLabel("মোবাইল নম্বর",{exact:true}).fill(phone);
+ await page.getByRole("button",{name:"পরের ধাপ"}).click();
+ await page.getByRole("radio",{name:"বিজ্ঞান",exact:true}).check();await page.locator("#consent").check();
+ await shot("mobile-registration");
+ await page.getByRole("button",{name:"এবার চাকা ঘোরাই"}).click();
+ await page.getByRole("button",{name:"চাকা ঘোরাও",exact:true}).waitFor();
+ const [fixture]=await db`SELECT id FROM alo.entries WHERE phone=${"88"+phone}`;fixtureId=fixture.id;
+ await shot("mobile-wheel");
+ const box=await page.locator(".wheel-touch").boundingBox();
+ await page.mouse.move(box.x+box.width*.8,box.y+box.height*.25);await page.mouse.down();
+ await page.mouse.move(box.x+box.width*.9,box.y+box.height*.7,{steps:5});await page.mouse.move(box.x+box.width*.4,box.y+box.height*.9,{steps:5});await page.mouse.up();
+ await page.getByRole("heading",{name:"ইয়েস! চমকটা তোমার!"}).waitFor();
+ await shot("mobile-result");await page.getByRole("button",{name:"উপহার কীভাবে পাবে?"}).click();const code=await page.locator(".collection-code strong").innerText();
+ await page.reload();await page.getByRole("heading",{name:"ইয়েস! চমকটা তোমার!"}).waitFor();
+ await page.getByRole("button",{name:"উপহার কীভাবে পাবে?"}).click();
+ assert.equal(await page.locator(".collection-code strong").innerText(),code);
+ assert.match(await page.locator(".story-body").innerText(),/আশপাশে|কল করে/);
+ await page.getByRole("button",{name:"আগের ধাপ"}).click();
+ const downloadPromise=page.waitForEvent("download");await page.getByRole("button",{name:"উপহারের ছবি সেভ করো"}).click();
+ const download=await downloadPromise;await download.saveAs(shots+"share-ticket.png");
+ for(const label of ["উপহার কীভাবে পাবে?","EduTab ড্র দেখো","শেষ ধাপ দেখো"])await page.getByRole("button",{name:label}).click();
+ assert.match(await page.locator(".community-link").getAttribute("href"),/facebook.com\/groups\/shikhocommunity/);
+ assert.match(await page.locator(".app-adventure").getAttribute("href"),/tech.shikho.android/);
+ assert.equal(await page.locator(".unified-share").count(),1);
+ await page.setViewportSize({width:1470,height:860});await shot("desktop-result");
+ const desktop=await browser.newContext({viewport:{width:1470,height:860}});const p=await desktop.newPage();
+ await p.goto(base);await p.locator('[data-ready="true"]').waitFor();await p.screenshot({path:shots+"desktop-welcome.png",fullPage:true});
+ assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await p.getByRole("button",{name:"চলো, শুরু করি"}).click();await p.screenshot({path:shots+"desktop-registration.png",fullPage:true});
+ await p.goto(base+"/ops");await p.getByLabel("অপারেশনস কী").fill(process.env.ALO_OPS_KEY);await p.getByRole("button",{name:"প্রবেশ করুন"}).click();
+ await p.getByRole("tab",{name:"অ্যানালিটিক্স"}).waitFor();await p.screenshot({path:shots+"ops-analytics.png",fullPage:true});
+ await p.getByRole("tab",{name:"পুরস্কার সংগ্রহ"}).click();await p.getByLabel("টিকিট কোড").fill(code);await p.getByRole("button",{name:"কোড দেখুন"}).click();
+ await p.getByRole("button",{name:"পুরস্কার দিয়ে সংগ্রহ নিশ্চিত করুন"}).waitFor();
+ await p.getByRole("button",{name:"পুরস্কার দিয়ে সংগ্রহ নিশ্চিত করুন"}).click();await p.getByText("সংগ্রহ করা হয়েছে।",{exact:true}).waitFor();
+ await page.reload();await page.getByRole("button",{name:"উপহার কীভাবে পাবে?"}).click();await page.getByText("পুরস্কার সংগ্রহ করা হয়েছে",{exact:true}).waitFor();
+ await desktop.close();assert.deepEqual(errors,[]);
+ console.log("PASS: mobile form validation, registration, gesture spin, persistent result, stall disclosure, downloadable private-safe share image, configured links, desktop layout and staff redemption.");
+ console.log("Screenshots: "+shots);
+}catch(error){await page.screenshot({path:shots+"failure.png",fullPage:true});console.error(await page.locator("body").innerText());throw error;}
+finally{
+ await browser.close();
+ if(!fixtureId){const [row]=await db`SELECT id FROM alo.entries WHERE phone=${"88"+phone}`;fixtureId=row?.id;}
+ if(fixtureId)await db.begin(async tx=>{
+  await tx`SELECT id FROM alo.sessions WHERE entry_id=${fixtureId} FOR UPDATE`;
+  const [entry]=await tx`SELECT prize_id,event_id FROM alo.entries WHERE id=${fixtureId}`;
+  if(entry&&["bag","book"].includes(entry.prize_id))await tx`UPDATE alo.inventory SET awarded=greatest(0,awarded-1) WHERE event_id=${entry.event_id} AND prize_id=${entry.prize_id}`;
+  await tx`DELETE FROM alo.analytics WHERE entry_id=${fixtureId} OR session_id IN (SELECT id FROM alo.sessions WHERE entry_id=${fixtureId})`;
+  await tx`DELETE FROM alo.crm_outbox WHERE entry_id=${fixtureId}`;
+  await tx`DELETE FROM alo.sessions WHERE entry_id=${fixtureId}`;
+  await tx`DELETE FROM alo.entries WHERE id=${fixtureId}`;
+ });
+ await db.end();
+}

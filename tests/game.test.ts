@@ -1,0 +1,38 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
+import { selectPrize, WEIGHTS } from "../src/lib/server/selection";
+
+test("BD phone forms share one identity; reject malformed numbers",()=>{
+  for(const value of ["01712345678","+8801712345678","8801712345678","008801712345678","1712345678","০১৭১২৩৪৫৬৭৮","+৮৮০ ১৭১২-৩৪৫৬৭৮"])
+    assert.equal(normalizePhone(value),"8801712345678",value);
+  for(const value of ["01212345678","017123456789","abc01712345678","0171234567","+441712345678","88001712345678"])
+    assert.equal(normalizePhone(value),null,value);
+});
+test("every possible roll produces exactly the approved distribution",()=>{
+  const counts:Record<string,number>={};
+  for(let i=0;i<10000;i++){const id=selectPrize([],()=>i);counts[id]=(counts[id]||0)+1;}
+  assert.deepEqual(counts,Object.fromEntries(WEIGHTS.map(p=>[p.id,p.weight])));
+  assert.equal(Object.keys(counts).some(k=>/edu|draw/.test(k)),false);
+  assert.equal(selectPrize(["book","bag"],()=>9950),"discount-20");
+  assert.equal(selectPrize(["book"],()=>9800),"discount-20");
+  for(let i=0;i<10000;i++)assert.equal(["book","bag"].includes(selectPrize(["book","bag"],()=>i)),false);
+});
+test("every wheel outcome lands under the top pointer after forward rotation",()=>{
+  for(let i=0;i<PRIZES.length;i++)for(const current of [-370,-12,0,91,9999]){
+    const target=wheelTarget(i,current,5);
+    assert.ok(target>current+4*360);
+    const centre=(i+.5)*360/PRIZES.length;
+    assert.ok(Math.abs(((target+centre)%360+360)%360)<.00001 || Math.abs(((target+centre)%360+360)%360-360)<.00001);
+  }
+});
+
+
+test("personal prize codes preserve Bangla names and accept old issued codes", async()=>{
+  const {createPrizeCode,prizeCodePattern}=await import("../src/lib/prize-code");
+  for(const [name,phone,prefix] of [["Arif Hasan","01712345678","ARIF-78-"],["আরিফ হাসান","০১৭১২৩৪৫৬৭৮","আরিফ-78-"],["Christopher Smith","+8801712345678","CHRISTOP-78-"],["✨","01712345678","SHIKHO-78-"]]){
+    const code=createPrizeCode(name,phone);assert.ok(code.startsWith(prefix),code);assert.ok(prizeCodePattern.test(code));assert.equal(code.split("-").at(-1)?.length,4);
+  }
+  assert.ok(prizeCodePattern.test("SH-123456ABCDEF"));assert.equal(prizeCodePattern.test("ARIF-01712345678-ABCD"),false);
+  assert.throws(()=>createPrizeCode("Arif","bad"));
+});
