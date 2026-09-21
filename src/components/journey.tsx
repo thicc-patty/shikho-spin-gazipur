@@ -19,10 +19,27 @@ const errors: Record<string,string> = {
   unavailable:"সংযোগে সমস্যা হচ্ছে। আবার চেষ্টা করো।",
   bot_check:"নিরাপত্তা যাচাই হয়নি। আবার চেষ্টা করো।",
 };
-async function request(path:string,data:unknown) {
+/** The event this browser is playing, so a lost session can be reopened silently. */
+let sessionEvent="";
+async function request(path:string,data:unknown,retried=false) {
   const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),signal:AbortSignal.timeout(20_000)});
   const result=await response.json();
-  if(!response.ok) throw new Error(result.error || "unavailable");
+  if(!response.ok) {
+    // A session can disappear for reasons the student had no part in: the device
+    // released itself, the cookie was cleared, the row expired. Telling them to
+    // refresh loses the name, phone and class they just typed, and nobody at a
+    // stall reads an error message. Reopen a session and submit again, once.
+    // Registration only: a spin needs the entry the old session was holding, and
+    // a fresh one cannot have it, so retrying there would only change the error.
+    // Skipped when a Turnstile token is in play, because it is single use.
+    const lostSession=response.status===401&&result.error==="session";
+    const safeToRetry=!retried&&sessionEvent&&path==="/api/register"&&!(data as {turnstile?:string})?.turnstile;
+    if(lostSession&&safeToRetry){
+      await request("/api/session",{event:sessionEvent},true);
+      return request(path,data,true);
+    }
+    throw new Error(result.error || "unavailable");
+  }
   return result;
 }
 export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:EventInfo; demo?:boolean;turnstileSiteKey?:string }) {
@@ -47,7 +64,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
   const page=Math.min(formPage,lastFormPage),finalPage=!!classLevel&&page===lastFormPage;
   const record=useCallback((action:string,where:Step=step)=>{if(!demo)track(action,event.id,where);},[event.id,step,demo]);
   const restore=useCallback(async()=>{
-    setError("");
+    setError("");sessionEvent=event.id;
     try {
       const data=await request("/api/session",{event:event.id});
       setReady(true);analyticsReady();
