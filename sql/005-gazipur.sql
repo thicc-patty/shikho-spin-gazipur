@@ -5,6 +5,6 @@ BEGIN;
 SELECT pg_advisory_xact_lock(260910);
 UPDATE alo.events SET active=false WHERE active=true;
 INSERT INTO alo.events(id,city,name,date,active)
- VALUES('gazipur','গাজীপুর','প্রথম আলো GPA5 সংবর্ধনা ২০২৬','2026-09-26',true)
+ VALUES('gazipur','গাজীপুর','প্রথম আলো × শিখো সংবর্ধনা ২০২৬','2026-09-26',true)
  ON CONFLICT(id) DO UPDATE SET city=excluded.city,name=excluded.name,active=true;
 COMMIT;
