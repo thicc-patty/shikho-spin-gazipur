@@ -51,7 +51,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     try {
       const data=await request("/api/session",{event:event.id});
       setReady(true);analyticsReady();
-      if(data.entry&&data.entry.prizeId&&data.entry.spinsLeft<=0){await fetch("/api/session",{method:"DELETE",headers:{"Content-Type":"application/json"},body:"{}"});return;}
+      if(data.entry&&data.entry.prizeId){await fetch("/api/session",{method:"DELETE",headers:{"Content-Type":"application/json"},body:"{}"});return;}
       if(data.entry) { setEntry(data.entry);setName(data.entry.name);setGroup(data.entry.group);setClassLevel(data.entry.classLevel||"");setStep(data.entry.prizeId?"result":"wheel");window.history.replaceState({...window.history.state,alo:{step:data.entry.prizeId?"result":"wheel",form:0,result:0,run:historyRun.current}},"",window.location.pathname+window.location.search); }
     } catch {setError("সংযোগ হচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করো।");}
   },[event.id]);
