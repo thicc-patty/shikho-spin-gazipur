@@ -171,3 +171,17 @@
   .story-page-3 .app-float{font-size:12px;padding:3px 9px}
   .story-page-3 .app-adventure strong{font-size:23px}
 }
+
+/* Closing actions on the final result screen. The share and community blocks
+   above are marketing; these two are what the person in front of the device
+   actually does next, so they get their own band and their own weight. */
+.story-actions{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px;padding-top:18px;border-top:1px solid var(--line)}
+.replay-button{background:var(--magenta);color:white;border-color:var(--magenta);box-shadow:0 4px 0 #8A0159;padding:13px 20px!important;min-height:54px}
+.replay-button:hover:not(:disabled){background:#d0258c}
+.replay-button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #8A0159}
+/* Staff-facing, so it stays findable without competing with the student's action. */
+.next-student{color:var(--muted);font-weight:500;text-decoration:none;min-height:44px;font-size:14px}
+.next-student:hover{color:var(--indigo)}
+/* .final-return is inline-flex, so margin auto never centred it. */
+.story-navigation{text-align:center}
+.story-navigation .final-return{display:inline-flex}
