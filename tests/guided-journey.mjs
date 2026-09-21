@@ -11,7 +11,8 @@ try{for(const [width,height,prizeId] of [[360,640,'discount-20'],[360,640,'book'
  await page.screenshot({path:`.screenshots/landing-after-${width}.png`,fullPage:true});
  await check('চলো, শুরু করি');await page.getByRole('button',{name:'চলো, শুরু করি'}).click();
  await check('পরের ধাপ');await page.getByLabel('তোমার নাম',{exact:true}).fill('পরীক্ষা শিক্ষার্থী');await page.getByLabel('মোবাইল নম্বর',{exact:true}).fill('01712345678');await page.getByRole('button',{name:'পরের ধাপ'}).click();
- await check('এবার চাকা ঘোরাই');await page.getByRole('radio',{name:'বিজ্ঞান',exact:true}).check();await page.locator('#consent').check();await page.getByRole('button',{name:'এবার চাকা ঘোরাই'}).click();
+ await check('পরের ধাপ');await page.getByRole('radio',{name:'নবম শ্রেণী',exact:true}).check();await page.locator('#consent').check();await page.getByRole('button',{name:'পরের ধাপ'}).click();
+ await check('এবার চাকা ঘোরাই');await page.getByRole('radio',{name:'বিজ্ঞান',exact:true}).check();await page.getByRole('button',{name:'এবার চাকা ঘোরাই'}).click();
  await check('চাকা ঘোরাও');await page.getByRole('button',{name:'চাকা ঘোরাও',exact:true}).click();await page.getByRole('heading',{name:'ইয়েস! চমকটা তোমার!'}).waitFor();
  await page.screenshot({path:`.screenshots/gift-${width}-${prizeId}.png`,fullPage:true});
  const exportText=await page.locator('.export-gift').innerText();assert.match(exportText,/তোমার ইউনিক কোড/);assert.match(exportText,/পরীক্ষা-78-[A-HJ-NP-Z2-9]{4}/);assert.doesNotMatch(exportText,/shikho-alo\.vercel\.app/);

@@ -20,7 +20,9 @@ try{
   await page.getByRole("button",{name:"চলো, শুরু করি"}).click();
   await page.getByLabel("তোমার নাম",{exact:true}).fill("ডেমো শিক্ষার্থী");await page.getByLabel("মোবাইল নম্বর",{exact:true}).fill("01712345678");
   await page.getByRole("button",{name:"পরের ধাপ",exact:true}).click();
-  await page.getByRole("radio",{name:"কারিগরি",exact:true}).check();await page.locator("#consent").check();
+  // Run 0 takes the junior path straight to the wheel; run 1 takes the study-group path.
+  await page.getByRole("radio",{name:run===0?"ষষ্ঠ শ্রেণী":"নবম শ্রেণী",exact:true}).check();await page.locator("#consent").check();
+  if(run===1){await page.getByRole("button",{name:"পরের ধাপ",exact:true}).click();await page.getByRole("radio",{name:"কারিগরি",exact:true}).check();}
   await page.getByRole("button",{name:"এবার চাকা ঘোরাই"}).click();await page.getByRole("button",{name:"চাকা ঘোরাও",exact:true}).click();
   await page.getByRole("heading",{name:"ইয়েস! চমকটা তোমার!"}).waitFor();
   await page.screenshot({path:'.screenshots/demo-gift.png',fullPage:true});

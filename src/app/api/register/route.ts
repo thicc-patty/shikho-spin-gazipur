@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { CAMPAIGN, normalizePhone, STUDY_GROUPS } from "@/lib/game";
+import { CAMPAIGN, CLASS_LEVELS, NO_GROUP, needsStudyGroup, normalizePhone, STUDY_GROUPS } from "@/lib/game";
 import { getEvent } from "@/lib/events";
 import { sql } from "@/lib/server/db";
 import { api, ApiError, body, rateLimit, requireSession } from "@/lib/server/http";
@@ -9,7 +9,7 @@ import { flushEntryCrm } from "@/lib/server/crm";
 import { after } from "next/server";
 import { verifyTurnstile } from "@/lib/server/turnstile";
 const Input = z.object({ name: z.string().trim().min(2).max(80), phone: z.string().max(30),
-  group: z.enum(STUDY_GROUPS.map(g => g.id)), event: z.string().max(48), consent: z.literal(true),turnstile:z.string().max(2048).optional() });
+  group: z.enum(STUDY_GROUPS.map(g => g.id)), classLevel: z.enum(CLASS_LEVELS.map(c => c.id)), event: z.string().max(48), consent: z.literal(true),turnstile:z.string().max(2048).optional() });
 export async function POST(req: Request) {
   return api(async () => {
     const data = Input.safeParse(await body(req));
@@ -18,6 +18,8 @@ export async function POST(req: Request) {
     if (!phone) throw new ApiError(422, "phone");
     const event = await getEvent(data.data.event);
     if (!event) throw new ApiError(404, "event");
+    // Only classes nine and ten choose a group; younger classes are stored without one.
+    const studyGroup = needsStudyGroup(data.data.classLevel) ? data.data.group : NO_GROUP;
     const current = await requireSession();
     if(!await verifyTurnstile(req,data.data.turnstile))throw new ApiError(403,"bot_check");
     await rateLimit(req, "register", 5);
@@ -29,8 +31,8 @@ export async function POST(req: Request) {
         if (saved.phone !== phone) throw new ApiError(409, "device_registered");
         return { entryId:saved.id, entry:entryView(saved) };
       }
-      const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,event_id,event_info)
-        VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${data.data.group},${event.id},${tx.json(event)})
+      const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,class_level,event_id,event_info)
+        VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${studyGroup},${data.data.classLevel},${event.id},${tx.json(event)})
         ON CONFLICT(campaign,phone) DO NOTHING RETURNING *`;
       if (!entry) throw new ApiError(409, "already_registered");
       await tx`UPDATE alo.sessions SET entry_id=${entry.id} WHERE id=${current.id}`;

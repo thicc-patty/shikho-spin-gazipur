@@ -10,14 +10,15 @@ export async function GET(req:Request){return api(async()=>{
   await requireOps();const event=new URL(req.url).searchParams.get("event")||"";
   if(event&&!await getEvent(event))throw new ApiError(404,"event");
   const db=sql();
-  const [funnel,prizes,totals,outbox,inventory]=await Promise.all([
+  const [funnel,prizes,classes,totals,outbox,inventory]=await Promise.all([
     db`SELECT name,count(*)::int AS events,count(DISTINCT session_id)::int AS sessions FROM alo.analytics WHERE (${event}='' OR event_id=${event}) GROUP BY name`,
     db`SELECT prize_id,count(*)::int AS count,count(redeemed_at)::int AS redeemed FROM alo.entries WHERE prize_id IS NOT NULL AND (${event}='' OR event_id=${event}) GROUP BY prize_id`,
+    db`SELECT class_level,count(*)::int AS count FROM alo.entries WHERE (${event}='' OR event_id=${event}) GROUP BY class_level ORDER BY class_level`,
     db`SELECT count(*)::int AS registered,count(won_at)::int AS completed,count(draw_entered_at)::int AS draw_entries FROM alo.entries WHERE (${event}='' OR event_id=${event})`,
     db`SELECT o.status,count(*)::int AS count FROM alo.crm_outbox o JOIN alo.entries e ON e.id=o.entry_id WHERE (${event}='' OR e.event_id=${event}) GROUP BY o.status`,
     db`SELECT * FROM alo.inventory WHERE (${event}='' OR event_id=${event}) ORDER BY event_id,prize_id`,
   ]);
-  return {ok:true,events:await getEvents(),activeEvent:(await getEvent())?.id,funnel,prizes,totals:totals[0],outbox,inventory,crmConnected:!!process.env.CRM_TOKEN};
+  return {ok:true,events:await getEvents(),activeEvent:(await getEvent())?.id,funnel,prizes,classes,totals:totals[0],outbox,inventory,crmConnected:!!process.env.CRM_TOKEN};
 });}
 const Action=z.discriminatedUnion("action",[
   z.object({action:z.literal("event"),id:z.string().regex(/^[a-z0-9-]{1,48}$/),city:z.string().trim().min(1).max(60),name:z.string().trim().min(1).max(120),date:z.iso.date(),active:z.boolean()}),

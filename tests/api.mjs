@@ -15,9 +15,11 @@ try{
  assert.equal((await call("/api/session",{event:"invented-city"})).status,404);
  assert.equal((await call("/api/session",{event:"chattogram"},"","POST",{origin:"https://elsewhere.example"})).status,403);
  for(let i=0;i<2;i++){const s=await call("/api/session",{event:"chattogram"});assert.equal(s.status,200);cookieJars.push(s.cookie);}
- const registration={name:"QA Automated Student",phone,group:"technical",event:"chattogram",consent:true};
+ const registration={name:"QA Automated Student",phone,group:"technical",classLevel:"c10",event:"chattogram",consent:true};
  assert.equal((await call("/api/register",{...registration,phone:"123"},cookieJars[0])).status,422);
  assert.equal((await call("/api/register",{...registration,consent:false},cookieJars[0])).status,400);
+ assert.equal((await call("/api/register",{...registration,classLevel:undefined},cookieJars[0])).status,400);
+ assert.equal((await call("/api/register",{...registration,classLevel:"c12"},cookieJars[0])).status,400);
  const concurrent=await Promise.all(cookieJars.map(c=>call("/api/register",registration,c)));
  assert.deepEqual(concurrent.map(r=>r.status).sort(),[200,409]);
  const owner=cookieJars[concurrent.findIndex(r=>r.status===200)];

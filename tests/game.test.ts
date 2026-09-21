@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
+import { CLASS_LEVELS, NO_GROUP, STUDY_GROUPS, classLabel, needsStudyGroup, normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
 import { selectPrize, WEIGHTS } from "../src/lib/server/selection";
 
 test("BD phone forms share one identity; reject malformed numbers",()=>{
@@ -35,4 +35,14 @@ test("personal prize codes preserve Bangla names and accept old issued codes", a
   }
   assert.ok(prizeCodePattern.test("SH-123456ABCDEF"));assert.equal(prizeCodePattern.test("ARIF-01712345678-ABCD"),false);
   assert.throws(()=>createPrizeCode("Arif","bad"));
+});
+
+test("only classes nine and ten reach the study group screen",()=>{
+  assert.deepEqual(CLASS_LEVELS.map(c=>c.id),["c6","c7","c8","c9","c10"]);
+  assert.deepEqual(CLASS_LEVELS.filter(c=>needsStudyGroup(c.id)).map(c=>c.id),["c9","c10"]);
+  for(const id of ["c6","c7","c8","c11","",'unknown'])assert.equal(needsStudyGroup(id),false,id);
+  assert.ok(STUDY_GROUPS.some(g=>g.id===NO_GROUP),"the skipped-group value must stay a real study group");
+  for(const c of CLASS_LEVELS)assert.equal(classLabel(c.id),c.bn);
+  assert.notEqual(classLabel("c11"),"c11");
+  assert.equal(classLabel("c99"),"c99");
 });

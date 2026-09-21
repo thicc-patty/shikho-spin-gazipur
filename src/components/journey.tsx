@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { PRIZES, STUDY_GROUPS, normalizePhone, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
+import { CLASS_LEVELS, NO_GROUP, PRIZES, STUDY_GROUPS, needsStudyGroup, normalizePhone, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
 import { analyticsReady, flushAnalytics, track } from "@/lib/analytics-client";
 import { ResultJourney } from "./result-journey";
 import { Icon, PrizeArt } from "./icons";
@@ -30,6 +30,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
   const [entry,setEntry]=useState<EntryView|null>(null);
   const [ready,setReady]=useState(demo),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const [name,setName]=useState(""),[phone,setPhone]=useState(""),[group,setGroup]=useState(""),[consent,setConsent]=useState(false);
+  const [classLevel,setClassLevel]=useState("");
   const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({});
   const [turnstile,setTurnstile]=useState(""),[turnstileReset,setTurnstileReset]=useState(0);
   const [rotation,setRotation]=useState(-12),[duration,setDuration]=useState(0),[spinning,setSpinning]=useState(false);
@@ -40,13 +41,17 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
   const heading=useRef<HTMLHeadingElement>(null),timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const drag=useRef<{angle:number;time:number;velocity:number;distance:number;rotation:number;pointer:number}|null>(null);
   const activeEvent=entry?.event || event;
+  // Classes six to eight have no study group, so their registration is two pages instead of three.
+  // The page count starts at the longer path so the indicator never grows, only settles once a class is chosen.
+  const groupNeeded=needsStudyGroup(classLevel),lastFormPage=groupNeeded?2:1,formPages=classLevel?lastFormPage+1:3;
+  const page=Math.min(formPage,lastFormPage),finalPage=!!classLevel&&page===lastFormPage;
   const record=useCallback((action:string,where:Step=step)=>{if(!demo)track(action,event.id,where);},[event.id,step,demo]);
   const restore=useCallback(async()=>{
     setError("");
     try {
       const data=await request("/api/session",{event:event.id});
       setReady(true);analyticsReady();
-      if(data.entry) { setEntry(data.entry);setName(data.entry.name);setGroup(data.entry.group);setStep(data.entry.prizeId?"result":"wheel");window.history.replaceState({...window.history.state,alo:{step:data.entry.prizeId?"result":"wheel",form:0,result:0,run:historyRun.current}},"",window.location.pathname+window.location.search); }
+      if(data.entry) { setEntry(data.entry);setName(data.entry.name);setGroup(data.entry.group);setClassLevel(data.entry.classLevel||"");setStep(data.entry.prizeId?"result":"wheel");window.history.replaceState({...window.history.state,alo:{step:data.entry.prizeId?"result":"wheel",form:0,result:0,run:historyRun.current}},"",window.location.pathname+window.location.search); }
     } catch {setError("সংযোগ হচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করো।");}
   },[event.id]);
   useEffect(()=>{if(!demo&&!initialized.current){initialized.current=true;void restore();}},[restore,demo]);
@@ -84,7 +89,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
       else if(entry?.prizeId)next="result";
       else if((next==="wheel"||next==="result")&&!entry)next="welcome";
       else if(next==="result")next="wheel";
-      setStep(next);setFormPage(next==="register"?Math.min(1,Math.max(0,saved?.form||0)):0);
+      setStep(next);setFormPage(next==="register"?Math.min(2,Math.max(0,saved?.form||0)):0);
       setResultPage(next==="result"&&saved?.step==="result"?Math.min(3,Math.max(0,saved.result||0)):0);
       setError("");setMessage("");
     };
@@ -96,13 +101,20 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     const issues:Record<string,string>={};
     if(name.trim().length<2)issues.name="তোমার নাম লেখো।";
     if(!normalizePhone(phone))issues.phone=errors.phone;
-    if(formPage===1&&!group)issues.group="তোমার বিভাগটি বেছে নাও।";
-    if(formPage===1&&!consent)issues.consent="এগোতে সম্মতি দাও।";
+    if(page>=1&&!classLevel)issues.classLevel="তোমার ক্লাস বেছে নাও।";
+    if(page>=1&&!consent)issues.consent="এগোতে সম্মতি দাও।";
+    if(page===2&&!group)issues.group="তোমার বিভাগটি বেছে নাও।";
     setFieldErrors(issues);
-    if(Object.keys(issues).length){record("registration_error");document.getElementById(Object.keys(issues)[0])?.focus();return;}
-    if(formPage===0){navigate("register",1);return;}
+    if(Object.keys(issues).length){
+      record("registration_error");
+      // Class and consent live on the earlier page; send the student back rather than to a hidden field.
+      if(page===2&&(issues.classLevel||issues.consent)){navigate("register",1);return;}
+      document.getElementById(Object.keys(issues)[0])?.focus();return;
+    }
+    if(!finalPage){navigate("register",page+1);return;}
+    const studyGroup=groupNeeded?group:NO_GROUP;
     setBusy(true);setError("");
-    try{if(demo){setEntry({name:name.trim(),group,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
+    try{if(demo){setEntry({name:name.trim(),group:studyGroup,classLevel,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group:studyGroup,classLevel,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
     catch(err){setError(errors[err instanceof Error?err.message:""]||errors.unavailable);setTurnstile("");setTurnstileReset(value=>value+1);record("registration_error");}
     finally{setBusy(false);}
   }
@@ -141,7 +153,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     d.rotation+=delta;d.angle=a;d.time=now;rotationRef.current=d.rotation;setRotation(d.rotation);
   }
   function pointerUp(e:PointerEvent<HTMLDivElement>){const d=drag.current;drag.current=null;if(d&&d.pointer===e.pointerId&&d.distance>14)void spin(d.velocity);}
-  function restartDemo(){historyRun.current++;setReplaying(true);setEntry(null);setName("");setPhone("");setGroup("");setConsent(false);setFieldErrors({});setFormPage(0);setRotation(-12);rotationRef.current=-12;setDuration(0);started.current=false;setStep("welcome");setResultPage(0);window.history.pushState({...window.history.state,alo:{step:"welcome",form:0,result:0,run:historyRun.current}},"","#welcome-1");}
+  function restartDemo(){historyRun.current++;setReplaying(true);setEntry(null);setName("");setPhone("");setGroup("");setClassLevel("");setConsent(false);setFieldErrors({});setFormPage(0);setRotation(-12);rotationRef.current=-12;setDuration(0);started.current=false;setStep("welcome");setResultPage(0);window.history.pushState({...window.history.state,alo:{step:"welcome",form:0,result:0,run:historyRun.current}},"","#welcome-1");}
   return <div className={`portal screen-journey step-${step}`} data-ready={ready}>
     <header className="site-header">
       <a href={`${demo?"/demo":"/"}?event=${event.id}`} className="brand-link" aria-label="শিখো স্পিন হোম"><Image src="/brand/shikho-logo.png" alt="শিখো" width={100} height={51} priority/></a>
@@ -175,26 +187,30 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
       </section>}
       {step==="register"&&<section className="form-layout">
         <div className="form-intro"><button className="text-button back" onClick={()=>window.history.back()}><Icon name="back" size={19}/> ফিরে যাও</button>
-          <div className="registration-progress" aria-label={`রেজিস্ট্রেশন ধাপ ${formPage+1} এর ২`}><span className="registration-progress-label">রেজিস্ট্রেশন</span><span className="registration-progress-bars" aria-hidden="true"><i className="active"/><i className={formPage===1?"active":""}/></span><strong>{formPage+1}/2</strong></div>
-          <h1 ref={heading} tabIndex={-1}>{formPage===0?<>তোমার নামটা<br/><span>জেনে নিই!</span></>:<>বিভাগ বেছে নাও।<br/><span>তারপরই স্পিন!</span></>}</h1><p>{formPage===0?(demo&&replaying?"আবার খেলতে নতুন করে রেজিস্ট্রেশন করো।":"স্পিন করতে আগে নাম ও নম্বর দিয়ে রেজিস্ট্রেশন করো।"):"তোমার বিভাগ বেছে নিয়ে সম্মতি দাও।"}</p>
+          <div className="registration-progress" aria-label={`রেজিস্ট্রেশন ধাপ ${page+1} এর ${formPages}`}><span className="registration-progress-label">রেজিস্ট্রেশন</span><span className="registration-progress-bars" aria-hidden="true">{Array.from({length:formPages},(_,i)=><i key={i} className={i<=page?"active":""}/>)}</span><strong>{page+1}/{formPages}</strong></div>
+          <h1 ref={heading} tabIndex={-1}>{page===0?<>তোমার নামটা<br/><span>জেনে নিই!</span></>:page===1?<>কোন ক্লাসে<br/><span>পড়ছ তুমি?</span></>:<>বিভাগ বেছে নাও।<br/><span>তারপরই স্পিন!</span></>}</h1><p>{page===0?(demo&&replaying?"আবার খেলতে নতুন করে রেজিস্ট্রেশন করো।":"স্পিন করতে আগে নাম ও নম্বর দিয়ে রেজিস্ট্রেশন করো।"):page===1?"তোমার ক্লাস বেছে নিয়ে সম্মতি দাও।":"তোমার বিভাগটি বেছে নাও।"}</p>
           <div className="registration-art" aria-hidden="true"><PrizeArt kind="bag"/><PrizeArt kind="book"/></div>
           <p className="desktop-note"><Icon name="lock"/>তোমার তথ্য শুধু এন্ট্রি, পুরস্কার ও শিখোর যোগাযোগের জন্য।</p>
         </div>
         <form className="registration-form" onSubmit={register} noValidate onFocus={formStarted}>
-          {formPage===0&&<><label htmlFor="name">তোমার নাম</label><input id="name" autoComplete="name" value={name} onChange={e=>{setName(e.target.value);setFieldErrors(v=>({...v,name:""}));}} maxLength={80} placeholder="তোমার নাম লেখো" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name?"name-error":undefined}/>
+          {page===0&&<><label htmlFor="name">তোমার নাম</label><input id="name" autoComplete="name" value={name} onChange={e=>{setName(e.target.value);setFieldErrors(v=>({...v,name:""}));}} maxLength={80} placeholder="তোমার নাম লেখো" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name?"name-error":undefined}/>
           {fieldErrors.name&&<p id="name-error" className="field-error">{fieldErrors.name}</p>}
           <label htmlFor="phone">মোবাইল নম্বর</label><input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e=>{setPhone(e.target.value);setFieldErrors(v=>({...v,phone:""}));}} maxLength={24} placeholder="01XXXXXXXXX" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone?"phone-error":"phone-help"}/>
           {fieldErrors.phone?<p id="phone-error" className="field-error">{fieldErrors.phone}</p>:<p id="phone-help" className="field-help">তোমার বা অভিভাবকের নম্বর দাও। প্রতি নম্বরে একবার খেলা যাবে।</p>}
           </>}
-          {formPage===1&&<><fieldset id="group" tabIndex={-1} aria-describedby={fieldErrors.group?"group-error":undefined}><legend>তুমি কোন বিভাগের?</legend><div className="group-options">{STUDY_GROUPS.map(g=><label key={g.id} className={`group-option ${group===g.id?"selected":""}`}><input type="radio" name="group" value={g.id} checked={group===g.id} onChange={()=>{setGroup(g.id);setFieldErrors(v=>({...v,group:""}));}}/><span>{g.bn}</span>{group===g.id&&<Icon name="check" size={16}/>}</label>)}</div></fieldset>
-          {fieldErrors.group&&<p id="group-error" className="field-error">{fieldErrors.group}</p>}
+          {page===1&&<><fieldset id="classLevel" tabIndex={-1} aria-describedby={fieldErrors.classLevel?"class-error":undefined}><legend>কোন ক্লাসে তুমি?</legend><div className="group-options class-options">{CLASS_LEVELS.map(c=><label key={c.id} className={`group-option ${classLevel===c.id?"selected":""}`}><input type="radio" name="classLevel" value={c.id} checked={classLevel===c.id} onChange={()=>{setClassLevel(c.id);setFieldErrors(v=>({...v,classLevel:"",group:""}));}}/><span>{c.bn}</span>{classLevel===c.id&&<Icon name="check" size={16}/>}</label>)}</div></fieldset>
+          {fieldErrors.classLevel&&<p id="class-error" className="field-error">{fieldErrors.classLevel}</p>}
           <label className="consent"><input id="consent" type="checkbox" checked={consent} onChange={e=>{setConsent(e.target.checked);setFieldErrors(v=>({...v,consent:""}));}}/><span>রেজিস্ট্রেশন, পুরস্কার ও কোর্সের অফার জানাতে আমার তথ্য ব্যবহারে সম্মতি দিচ্ছি।</span></label>
           {fieldErrors.consent&&<p className="field-error">{fieldErrors.consent}</p>}
           </>}
-          {formPage===1&&!demo&&turnstileSiteKey&&<Turnstile siteKey={turnstileSiteKey} onToken={setTurnstile} resetKey={turnstileReset}/>}
+          {page===2&&<><fieldset id="group" tabIndex={-1} aria-describedby={fieldErrors.group?"group-error":undefined}><legend>তুমি কোন বিভাগের?</legend><div className="group-options">{STUDY_GROUPS.map(g=><label key={g.id} className={`group-option ${group===g.id?"selected":""}`}><input type="radio" name="group" value={g.id} checked={group===g.id} onChange={()=>{setGroup(g.id);setFieldErrors(v=>({...v,group:""}));}}/><span>{g.bn}</span>{group===g.id&&<Icon name="check" size={16}/>}</label>)}</div></fieldset>
+          {fieldErrors.group&&<p id="group-error" className="field-error">{fieldErrors.group}</p>}
+
+          </>}
+          {finalPage&&!demo&&turnstileSiteKey&&<Turnstile siteKey={turnstileSiteKey} onToken={setTurnstile} resetKey={turnstileReset}/>}
           {error&&<p className="error-notice" role="alert">{error}</p>}
           {!ready&&<button type="button" className="text-button" onClick={()=>void restore()}>সংযোগ আবার চেষ্টা করো</button>}
-          <button className="button primary" disabled={busy||!ready||(formPage===1&&!demo&&!!turnstileSiteKey&&!turnstile)} type="submit">{busy?"রেজিস্ট্রেশন হচ্ছে...":formPage===0?"পরের ধাপ":turnstileSiteKey&&!turnstile?"যাচাই হচ্ছে...":"এবার চাকা ঘোরাই"}{!busy&&<Icon name="arrow"/>}</button>
+          <button className="button primary" disabled={busy||!ready||(finalPage&&!demo&&!!turnstileSiteKey&&!turnstile)} type="submit">{busy?"রেজিস্ট্রেশন হচ্ছে...":!finalPage?"পরের ধাপ":turnstileSiteKey&&!turnstile?"যাচাই হচ্ছে...":"এবার চাকা ঘোরাই"}{!busy&&<Icon name="arrow"/>}</button>
         </form>
       </section>}
       {step==="wheel"&&<section className="play-layout">

@@ -42,10 +42,14 @@ try {
   await page.getByLabel('তোমার নাম', { exact: true }).fill('পরীক্ষা শিক্ষার্থী');
   await page.getByLabel('মোবাইল নম্বর', { exact: true }).fill('01712345678');
   await page.getByRole('button', { name: 'পরের ধাপ' }).click();
+  await assertScreen(page, 'registration class');
+
+  await page.getByRole('radio', { name: 'নবম শ্রেণী', exact: true }).check();
+  await page.locator('#consent').check();
+  await page.getByRole('button', { name: 'পরের ধাপ' }).click();
   await assertScreen(page, 'registration group');
 
   await page.getByRole('radio', { name: 'বিজ্ঞান', exact: true }).check();
-  await page.locator('#consent').check();
   await page.getByRole('button', { name: 'এবার চাকা ঘোরাই' }).click();
   await assertScreen(page, 'wheel');
   await page.getByRole('button', { name: 'চাকা ঘোরাও', exact: true }).click();

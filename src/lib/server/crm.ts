@@ -9,6 +9,18 @@ const FORM_FIELD_ID = 536;
 const PRODUCT_ID = "1";
 const LEAD_CAMPAIGN = "S26_LGPA5_Spin";
 const LeadResponse = z.object({ id: z.coerce.number().int().positive(), prospect_id: z.string().uuid() });
+// Class eleven is what the original GPA5 entries carry; six to ten arrived with the school-class step.
+// Passing year follows the student's next board exam from the 2026 campaign year.
+// Confirm these cf_class codes and years with the CRM owner before a live run.
+const CLASSES: Record<string, { cf: string; passing: string }> = {
+  c6: { cf: "C6", passing: "2031" }, c7: { cf: "C7", passing: "2030" }, c8: { cf: "C8", passing: "2029" },
+  c9: { cf: "C9", passing: "2028" }, c10: { cf: "C10", passing: "2027" }, c11: { cf: "C11", passing: "2028" },
+};
+function classFields(row:EntryRow) {
+  const level=CLASSES[row.class_level];
+  if(!level)throw new Error("Unsupported class level");
+  return { cf_class:level.cf, cf_passing_year:level.passing };
+}
 const GROUPS: Record<StudyGroupId, { lead: "SCI"|"HUM"|"BS"|"ALIM"|"NONE"; event: "SCI"|"HUM"|"BS"|"ALIM"|"VOC"|"NONE" }> = {
   science: { lead: "SCI", event: "SCI" },
   humanities: { lead: "HUM", event: "HUM" },
@@ -58,8 +70,9 @@ export function crmFormLabel(event:EventInfo) {
 export function leadPayload(row:EntryRow) {
   const group=GROUPS[row.study_group as StudyGroupId];
   if(!group)throw new Error("Unsupported study group");
+  const level=classFields(row);
   return { mobile:row.phone, product_id:PRODUCT_ID, source:"Social Media Form", campaign:LEAD_CAMPAIGN,
-    name:row.name, country_code:"BD", cf_class:"C11", cf_group:group.lead, cf_passing_year:"2028", cf_palo_year:"2026" };
+    name:row.name, country_code:"BD", cf_class:level.cf_class, cf_group:group.lead, cf_passing_year:level.cf_passing_year, cf_palo_year:"2026" };
 }
 function dhakaTimestamp(value:Date) {
   return new Date(value.getTime()+6*3600_000).toISOString().slice(0,19).replace("T"," ");
@@ -70,7 +83,7 @@ export function eventPayload(row:EntryRow, prospectId:string) {
   if(!group)throw new Error("Unsupported study group");
   return { type:"campaign_form_submission", lead_prospect_id:prospectId, product_id:PRODUCT_ID,
     created_at:dhakaTimestamp(row.won_at), cf_form_name:crmFormValue(row.event_info), cf_result:RESULTS[row.prize_id],
-    cf_form_type:"ORGANIC", cf_class:"C11", cf_passing_year:"2028", cf_group:group.event, cf_sub_status:"Unpaid" };
+    cf_form_type:"ORGANIC", ...classFields(row), cf_group:group.event, cf_sub_status:"Unpaid" };
 }
 
 async function claim(entryId:string):Promise<ClaimedJob|undefined>{
