@@ -97,7 +97,14 @@ async function claim(entryId:string):Promise<ClaimedJob|undefined>{
 }
 async function fail(job:ClaimedJob,error:unknown){
   const ambiguous=job.kind==="spin.completed"&&!(error instanceof CrmHttpError);
-  const terminal=error instanceof CrmHttpError&&error.status>=400&&error.status<500&&error.status!==429;
+  // A 4xx usually means a payload the CRM will never accept, so it used to be
+  // terminal on the first try and nothing ever claimed the job again. But the
+  // window between setting CRM_TOKEN and provisioning the form option 4xxs every
+  // lead for a reason that fixes itself minutes later, and an unverified cf_class
+  // code does the same. Terminal only after eight attempts: with the capped
+  // backoff that is roughly four hours of retries, so a mis-ordered launch
+  // delays leads instead of destroying them.
+  const terminal=error instanceof CrmHttpError&&error.status>=400&&error.status<500&&error.status!==429&&job.attempts>=8;
   const status=ambiguous?"uncertain":terminal?"failed":"pending";
   const message=error instanceof CrmHttpError?`HTTP ${error.status}`:error instanceof Error?error.name:"Unknown error";
   const delay=Math.min(60,2**Math.min(job.attempts,5));
