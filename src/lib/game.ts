@@ -18,6 +18,11 @@ export const classLabel = (id: string) => CLASS_BY_ID.get(id as ClassLevelId)?.b
 export const needsStudyGroup = (id: string) => CLASS_BY_ID.get(id as ClassLevelId)?.group === true;
 /** Stored for classes six to eight, who never see the group screen. */
 export const NO_GROUP: StudyGroupId = "others";
+/** Bangladeshi names usually open with an honorific, so greet the name, not the title. */
+export const firstName = (name: string) => {
+  const words = name.trim().split(/\s+/);
+  return words.find(w => !/^(?:md|mohammad|muhammad|mohammed|mst|most|mrs|mr|miss)\.?$/i.test(w)) || words[0] || "";
+};
 export const PRIZES = [
   { id: "discount-20", short: "২০%", title: "২০% ছাড়", percent: 20, color: "#D0D8F4", ink: "#262F74", kind: "discount" },
   { id: "bag", short: "ব্যাগ", title: "শিখো ব্যাগ", percent: 0, color: "#C02080", ink: "#FFFFFF", kind: "physical" },

@@ -14,11 +14,16 @@ export async function POST(req: Request) {
     const current = await requireSession();
     const [count] = await sql()`SELECT count(*)::int AS count FROM alo.analytics WHERE session_id=${current.id}`;
     if (count.count > 500) throw new ApiError(429,"rate_limit");
-    for (const event of data.data.events) {
-      if (!await getEvent(event.event)) throw new ApiError(404,"event");
-      await sql()`INSERT INTO alo.analytics(id,session_id,entry_id,event_id,name,detail)
-        VALUES (${event.id},${current.id},${current.entry_id},${event.event},${event.name},${sql().json({step:event.step || null})}) ON CONFLICT(id) DO NOTHING`;
+    // One lookup per distinct event and a single multi-row insert. A full
+    // 20-event batch used to cost 41 round trips, on the hottest path there is.
+    for (const id of new Set(data.data.events.map(e => e.event))) {
+      if (!await getEvent(id)) throw new ApiError(404,"event");
     }
+    const rows = data.data.events.map(event => ({
+      id: event.id, session_id: current.id, entry_id: current.entry_id,
+      event_id: event.event, name: event.name, detail: { step: event.step || null },
+    }));
+    await sql()`INSERT INTO alo.analytics ${sql()(rows,"id","session_id","entry_id","event_id","name","detail")} ON CONFLICT(id) DO NOTHING`;
     return { ok:true };
   });
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CLASS_LEVELS, NO_GROUP, STUDY_GROUPS, classLabel, needsStudyGroup, normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
+import { CLASS_LEVELS, NO_GROUP, STUDY_GROUPS, classLabel, firstName, needsStudyGroup, normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
 import { selectPrize, WEIGHTS } from "../src/lib/server/selection";
 
 test("BD phone forms share one identity; reject malformed numbers",()=>{
@@ -45,4 +45,11 @@ test("only classes nine and ten reach the study group screen",()=>{
   for(const c of CLASS_LEVELS)assert.equal(classLabel(c.id),c.bn);
   assert.notEqual(classLabel("c11"),"c11");
   assert.equal(classLabel("c99"),"c99");
+});
+
+test("greeting and prize codes skip a leading honorific",()=>{
+  for(const [input,want] of [["Md Abidur Rahman","Abidur"],["MD. Abidur Rahman","Abidur"],
+    ["Mohammad Rafi","Rafi"],["Mst. Nusrat Jahan","Nusrat"],["Jaeed Rahman","Jaeed"],
+    ["মোহাম্মদ রাফি","মোহাম্মদ"],["Md","Md"],["  Md   Abidur  ","Abidur"]])
+    assert.equal(firstName(input),want,input);
 });

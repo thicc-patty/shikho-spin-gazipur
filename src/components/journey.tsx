@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { CLASS_LEVELS, NO_GROUP, PRIZES, STUDY_GROUPS, needsStudyGroup, normalizePhone, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
+import { CLASS_LEVELS, NO_GROUP, PRIZES, STUDY_GROUPS, firstName, needsStudyGroup, normalizePhone, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
 import { analyticsReady, flushAnalytics, track } from "@/lib/analytics-client";
 import { ResultJourney } from "./result-journey";
 import { Icon, PrizeArt } from "./icons";
@@ -215,7 +215,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
       </section>}
       {step==="wheel"&&<section className="play-layout">
         <div className="play-copy"><span className="entry-confirmed"><Icon name="check" size={18}/> এন্ট্রি হয়ে গেছে!</span>
-          <h1 ref={heading} tabIndex={-1}>{name.trim().split(/\s+/)[0]},<br/>{" "}<span>এবার তোমার পালা!</span></h1><p>চাকায় আঙুল দিয়ে সোয়াইপ করো।<br/>দেখি, কী উপহার পাও!</p>
+          <h1 ref={heading} tabIndex={-1}>{firstName(name)},<br/>{" "}<span>এবার তোমার পালা!</span></h1><p>চাকায় আঙুল দিয়ে সোয়াইপ করো।<br/>দেখি, কী উপহার পাও!</p>
           <div className="prize-line"><PrizeArt kind="bag"/><PrizeArt kind="book"/><span>ব্যাগ, বই কিংবা<br/><strong>২০% থেকে ৬০% ছাড়</strong></span></div>
           <p className="fair-note">পুরস্কার র‍্যান্ডম। সব পুরস্কারের সম্ভাবনা এক নয়।</p>
         </div>
