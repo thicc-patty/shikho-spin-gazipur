@@ -1,5 +1,5 @@
 import "server-only";
-import { MAX_SPINS, type EntryView, type EventInfo, type PrizeId } from "../game";
+import type { EntryView, EventInfo, PrizeId } from "../game";
 export type EntryRow = {
   id: string; phone: string; name: string; study_group: string; class_level: string; spins: number; event_id: string; event_info: EventInfo;
   prize_id: PrizeId | null; prize_code: string | null; won_at: Date | null;
@@ -7,8 +7,7 @@ export type EntryRow = {
   crm_lead_id?: number | null; crm_prospect_id?: string | null;
 };
 export function entryView(row: EntryRow): EntryView {
-  return { name: row.name, group: row.study_group, classLevel: row.class_level,
-    spinsLeft: Math.max(0, MAX_SPINS - (row.spins || 0)), event: row.event_info, prizeId: row.prize_id,
+  return { name: row.name, group: row.study_group, classLevel: row.class_level, event: row.event_info, prizeId: row.prize_id,
     code: row.prize_code, wonAt: row.won_at?.toISOString() || null,
     expiresAt: row.expires_at?.toISOString() || null, redeemedAt: row.redeemed_at?.toISOString() || null };
 }

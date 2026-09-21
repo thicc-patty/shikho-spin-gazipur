@@ -13,7 +13,7 @@ const readableBangla = Noto_Sans_Bengali({ subsets: ["bengali", "latin"], variab
 const poppins = Poppins({ subsets: ["latin"], variable: "--font-poppins", display: "swap", weight: ["400", "500", "600", "700"] });
 
 const shareTitle = "চাকা ঘোরাও, চমক জেতো! | শিখো স্পিন";
-const shareDescription = "ফ্রি স্পিনে জেতো HSC 28 কোর্সে ছাড়, ব্যাগ অথবা বই। সাথে থাকছে জাতীয় EduTab ড্র-তে এন্ট্রি!";
+const shareDescription = "ফ্রি স্পিনে জেতো কোর্সে ছাড়, ব্যাগ অথবা বই। সাথে থাকছে জাতীয় EduTab ড্র-তে এন্ট্রি!";
 const shareImage = { url: "/brand/shikho-spin-og-v1.jpg", width: 1200, height: 630, alt: "শিখো স্পিন: চাকা ঘোরাও, চমক জেতো! কোর্সে ছাড়, ব্যাগ, বই এবং পৃথক জাতীয় EduTab ড্র।" };
 // Share previews must resolve against this deployment's own domain, never a previous
 // campaign's. Vercel supplies the production hostname; SITE_URL overrides for a custom domain.

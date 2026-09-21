@@ -35,7 +35,14 @@ export async function POST(req: Request) {
       const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,class_level,event_id,event_info)
         VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${studyGroup},${data.data.classLevel},${event.id},${tx.json(event)})
         ON CONFLICT(campaign,phone) DO NOTHING RETURNING *`;
-      if (!entry) throw new ApiError(409, "already_registered");
+      // A phone that has played before simply resumes its own entry: same code,
+      // same best prize, free to spin again. Without this, a student who came
+      // back after the stall reset the device would be locked out for good.
+      if (!entry) {
+        const [existing] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE campaign=${CAMPAIGN} AND phone=${phone}`;
+        await tx`UPDATE alo.sessions SET entry_id=${existing.id} WHERE id=${current.id}`;
+        return { entryId:existing.id, row:null, entry:entryView(existing) };
+      }
       await tx`UPDATE alo.sessions SET entry_id=${entry.id} WHERE id=${current.id}`;
       await tx`INSERT INTO alo.analytics(id,session_id,entry_id,event_id,name) VALUES (${randomUUID()},${current.id},${entry.id},${event.id},'registration_completed')`;
       await tx`INSERT INTO alo.crm_outbox(id,entry_id,kind,payload) VALUES (${randomUUID()},${entry.id},'lead.upsert',${tx.json(crmPayload(entry,"lead.upsert"))})`;

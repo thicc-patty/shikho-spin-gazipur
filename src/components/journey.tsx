@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { CLASS_LEVELS, MAX_SPINS, NO_GROUP, PRIZES, STUDY_GROUPS, bnSpinsLeft, firstName, needsStudyGroup, normalizePhone, prizeRank, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
+import { CLASS_LEVELS, NO_GROUP, PRIZES, STUDY_GROUPS, firstName, needsStudyGroup, normalizePhone, prizeRank, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
 import { analyticsReady, flushAnalytics, track } from "@/lib/analytics-client";
 import { ResultJourney } from "./result-journey";
 import { Icon, PrizeArt } from "./icons";
@@ -73,7 +73,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
   },[record,demo]);
   useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);},[]);
   function navigate(next:Step,form=0,result=0){
-    if(entry?.prizeId&&entry.spinsLeft<=0&&next!=="result"){next="result";result=0;}
+    if(entry?.prizeId&&next!=="result"&&next!=="wheel"){next="result";result=0;}
     setError("");setMessage("");setStep(next);setFormPage(form);setResultPage(result);
     window.history.pushState({...window.history.state,alo:{step:next,form,result,run:historyRun.current}},"",`#${next}-${next==="register"?form+1:next==="result"?result+1:1}`);
   }
@@ -88,7 +88,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
       let next:Step=saved?.run===historyRun.current?saved.step:"welcome";
       if(!["welcome","register","wheel","result"].includes(next))next="welcome";
       if(spinLock.current)next="wheel";
-      else if(entry?.prizeId&&entry.spinsLeft<=0)next="result";
+      else if(entry?.prizeId)next="result";
       else if((next==="wheel"||next==="result")&&!entry)next="welcome";
       else if(next==="result")next="wheel";
       setStep(next);setFormPage(next==="register"?Math.min(2,Math.max(0,saved?.form||0)):0);
@@ -116,13 +116,12 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     if(!finalPage){navigate("register",page+1);return;}
     const studyGroup=groupNeeded?group:NO_GROUP;
     setBusy(true);setError("");
-    try{if(demo){setEntry({name:name.trim(),group:studyGroup,classLevel,spinsLeft:MAX_SPINS,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group:studyGroup,classLevel,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
+    try{if(demo){setEntry({name:name.trim(),group:studyGroup,classLevel,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group:studyGroup,classLevel,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
     catch(err){setError(errors[err instanceof Error?err.message:""]||errors.unavailable);setTurnstile("");setTurnstileReset(value=>value+1);record("registration_error");}
     finally{setBusy(false);}
   }
   async function spin(speed=0.6) {
     if(spinLock.current||!entry)return;
-    if(entry.spinsLeft<=0){move("result");return;}
     spinLock.current=true;setSpinning(true);setError("");setMessage("তোমার চমক আসছে...");record("spin_started");
     const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Immediate movement acknowledges the gesture while the server commits the prize.
@@ -131,7 +130,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     try {
       const data=await request(demo?"/api/demo/spin":"/api/spin",{});
       const kept=demo&&prizeRank(data.prizeId)<=prizeRank(entry.prizeId)?entry.prizeId!:data.prizeId;
-      const won:EntryView=demo?{...entry,prizeId:kept,spinsLeft:Math.max(0,entry.spinsLeft-1),code:entry.code||createPrizeCode(entry.name,phone),wonAt:entry.wonAt||new Date().toISOString(),expiresAt:kept.startsWith("discount-")?(entry.expiresAt||new Date(Date.now()+72*3600_000).toISOString()):null}:data.entry;
+      const won:EntryView=demo?{...entry,prizeId:kept,code:entry.code||createPrizeCode(entry.name,phone),wonAt:entry.wonAt||new Date().toISOString(),expiresAt:kept.startsWith("discount-")?(entry.expiresAt||new Date(Date.now()+72*3600_000).toISOString()):null}:data.entry;
       const turns=5+Math.min(7,Math.floor(speed*3));
       const finish=wheelTarget(PRIZES.findIndex(p=>p.id===won.prizeId),rotationRef.current,turns);
       const ms=reduced?80:4600+Math.min(speed,3)*220;
@@ -183,9 +182,9 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
             <span className="prize-caption caption-book"><PrizeArt kind="book"/>বইও আছে!</span>
             <span className="discount-sticker">সর্বোচ্চ<strong>৬০%</strong>কোর্সে ছাড়</span>
           </div>
-          <p className="wheel-description">HSC 28 কোর্সে ছাড়, ব্যাগ অথবা বই।<br/>এক স্পিনে এক উপহার!</p>
+          <p className="wheel-description">কোর্সে ছাড়, ব্যাগ অথবা বই।<br/>এক স্পিনে এক উপহার!</p>
           <button className="button primary start-button" onClick={()=>move("register")}>চলো, শুরু করি <Icon name="arrow"/></button>
-          <p className="micro muted">বিনামূল্যে খেলো · প্রতি নম্বরে একবার</p>
+          <p className="micro muted">বিনামূল্যে খেলো</p>
         </div>
         <div className="draw-banner">
           <div className="edutab-teaser-image"><Image className="edutab-thumbnail" src="/brand/edutab-official.jpg" alt="শিখো EduTab" width={160} height={89} loading="eager"/><span>EduTab</span></div>
@@ -204,7 +203,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
           {page===0&&<><label htmlFor="name">তোমার নাম</label><input id="name" autoComplete="name" value={name} onChange={e=>{setName(e.target.value);setFieldErrors(v=>({...v,name:""}));}} maxLength={80} placeholder="তোমার নাম লেখো" aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name?"name-error":undefined}/>
           {fieldErrors.name&&<p id="name-error" className="field-error">{fieldErrors.name}</p>}
           <label htmlFor="phone">মোবাইল নম্বর</label><input id="phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={e=>{setPhone(e.target.value);setFieldErrors(v=>({...v,phone:""}));}} maxLength={24} placeholder="01XXXXXXXXX" aria-invalid={!!fieldErrors.phone} aria-describedby={fieldErrors.phone?"phone-error":"phone-help"}/>
-          {fieldErrors.phone?<p id="phone-error" className="field-error">{fieldErrors.phone}</p>:<p id="phone-help" className="field-help">তোমার বা অভিভাবকের নম্বর দাও। প্রতি নম্বরে একবার খেলা যাবে।</p>}
+          {fieldErrors.phone?<p id="phone-error" className="field-error">{fieldErrors.phone}</p>:<p id="phone-help" className="field-help">তোমার বা অভিভাবকের নম্বর দাও।</p>}
           </>}
           {page===1&&<><fieldset id="classLevel" tabIndex={-1} aria-describedby={fieldErrors.classLevel?"class-error":undefined}><legend>কোন ক্লাসে তুমি?</legend><div className="group-options class-options">{CLASS_LEVELS.map(c=><label key={c.id} className={`group-option ${classLevel===c.id?"selected":""}`}><input type="radio" name="classLevel" value={c.id} checked={classLevel===c.id} onChange={()=>{setClassLevel(c.id);setFieldErrors(v=>({...v,classLevel:"",group:""}));}}/><span>{c.bn}</span>{classLevel===c.id&&<Icon name="check" size={16}/>}</label>)}</div></fieldset>
           {fieldErrors.classLevel&&<p id="class-error" className="field-error">{fieldErrors.classLevel}</p>}
@@ -231,7 +230,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
           <p className="spin-instruction" aria-live="polite">{spinning?message:"চাকায় সোয়াইপ করো, অথবা..."}</p>
           {error&&<p className="error-notice" role="alert">{error}</p>}
           <button className="button primary" onClick={()=>void spin()} disabled={spinning}>{spinning?<><span className="loading-spinner"/>চমক আসছে...</>:<>চাকা ঘোরাও <Icon name="spark"/></>}</button>
-          <p className="micro muted">{entry&&entry.spinsLeft<MAX_SPINS?bnSpinsLeft(entry.spinsLeft):"স্পিন করলেই জাতীয় EduTab ড্র-তে এন্ট্রি।"}</p>
+          <p className="micro muted">স্পিন করলেই জাতীয় EduTab ড্র-তে এন্ট্রি।</p>
         </div>
       </section>}
       {step==="result"&&entry&&entry.prizeId&&<ResultJourney entry={entry} demo={demo} record={record} onReplay={()=>void nextStudent()} onSpinAgain={spinAgain} page={resultPage} onPageChange={page=>navigate("result",0,page)} onBack={()=>window.history.back()}/>}

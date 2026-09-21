@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { MAX_SPINS, prizeRank } from "@/lib/game";
+import { prizeRank } from "@/lib/game";
 import { createPrizeCode } from "@/lib/prize-code";
 import { sql } from "@/lib/server/db";
 import { api, ApiError, body, requireSession } from "@/lib/server/http";
@@ -16,9 +16,8 @@ export async function POST(req: Request) {
     if (!current.entry_id) throw new ApiError(401, "register");
     const result=await sql().begin(async tx => {
       const [entry] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE id=${current.entry_id} FOR UPDATE`;
-      // Three spins per phone. Later spins can only improve on the prize held,
-      // so a student never watches a better result be taken away.
-      if (entry.spins >= MAX_SPINS) return {entryId:entry.id,row:null as EntryRow|null,entry:entryView(entry)};
+      // No cap on spins. A later spin can only improve on the prize already
+      // held, so a student never watches a better result be taken away.
       for (const id of ["bag", "book"]) {
         await tx`INSERT INTO alo.inventory(event_id,prize_id) VALUES (${entry.event_id},${id}) ON CONFLICT DO NOTHING`;
       }
