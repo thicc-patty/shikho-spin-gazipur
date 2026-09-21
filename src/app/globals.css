@@ -192,7 +192,7 @@
    catches a frame mid-sweep. Only `translate` is animated (the compositor handles
    it without repainting); the card's drop-shadow stays put, which keeps the
    result screen cheap on the low-end phones this runs on. */
-@keyframes gift-hover{from{translate:0 4px}to{translate:0 -4px}}
+@keyframes gift-hover{from{translate:0 5.6px}to{translate:0 -5.6px}}
 @keyframes gift-sheen{
   0%{transform:translateX(-135%) rotate(9deg);opacity:0}
   6%{opacity:1}
