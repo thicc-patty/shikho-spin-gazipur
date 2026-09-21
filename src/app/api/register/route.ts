@@ -23,7 +23,13 @@ export async function POST(req: Request) {
     const studyGroup = needsStudyGroup(data.data.classLevel) ? data.data.group : NO_GROUP;
     const current = await requireSession();
     if(!await verifyTurnstile(req,data.data.turnstile))throw new ApiError(403,"bot_check");
-    await rateLimit(req, "register", 5);
+    // Every student at the stall shares one public IP — the venue's wifi, or a
+    // carrier NAT on mobile data. At five per ten minutes the sixth student of
+    // the morning was refused, which is why the session limit next door is 300.
+    // The real guard against junk leads is not this counter: a lead needs a
+    // valid BD number and ON CONFLICT(campaign,phone) keeps one entry per phone.
+    // This only has to stop a script, so it sits far above any human queue.
+    await rateLimit(req, "register", 100);
     const result = await sql().begin(async tx => {
       // Serialise two submissions from the same browser before inserting a lead.
       const [locked] = await tx`SELECT entry_id FROM alo.sessions WHERE id=${current.id} FOR UPDATE`;
