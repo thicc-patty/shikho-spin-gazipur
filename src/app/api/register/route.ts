@@ -31,12 +31,16 @@ export async function POST(req: Request) {
     // This only has to stop a script, so it sits far above any human queue.
     await rateLimit(req, "register", 100);
     const result = await sql().begin(async tx => {
+      // Every branch returns its row, so a resume mirrors to the Sheet as well.
+      // Only a brand new entry used to, which is why a phone already in Postgres
+      // never came back to a Sheet whose rows had been cleared: the student
+      // registered, nothing was written, and only a spin restored the row.
       // Serialise two submissions from the same browser before inserting a lead.
       const [locked] = await tx`SELECT entry_id FROM alo.sessions WHERE id=${current.id} FOR UPDATE`;
       if (locked.entry_id) {
         const [saved] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE id=${locked.entry_id}`;
         if (saved.phone !== phone) throw new ApiError(409, "device_registered");
-        return { entryId:saved.id, row:null, entry:entryView(saved) };
+        return { entryId:saved.id, row:saved, entry:entryView(saved) };
       }
       const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,class_level,event_id,event_info)
         VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${studyGroup},${data.data.classLevel},${event.id},${tx.json(event)})
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
       if (!entry) {
         const [existing] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE campaign=${CAMPAIGN} AND phone=${phone}`;
         await tx`UPDATE alo.sessions SET entry_id=${existing.id} WHERE id=${current.id}`;
-        return { entryId:existing.id, row:null, entry:entryView(existing) };
+        return { entryId:existing.id, row:existing, entry:entryView(existing) };
       }
       await tx`UPDATE alo.sessions SET entry_id=${entry.id} WHERE id=${current.id}`;
       await tx`INSERT INTO alo.analytics(id,session_id,entry_id,event_id,name) VALUES (${randomUUID()},${current.id},${entry.id},${event.id},'registration_completed')`;
