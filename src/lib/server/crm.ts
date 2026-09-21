@@ -139,6 +139,16 @@ export async function flushPendingCrm(limit=25){
   if(!process.env.CRM_TOKEN)return {processed:0,configured:false};
   await sql()`UPDATE alo.crm_outbox SET status=CASE WHEN kind='lead.upsert' THEN 'pending' ELSE 'uncertain' END,
     last_error='Delivery interrupted',updated_at=now() WHERE status='delivering' AND updated_at<now()-interval '10 minutes'`;
+  // A failed job is retried, not buried. Nothing claimed 'failed', so every lead
+  // rejected while S26_Spin_Gazipur did not yet exist stayed lost even once the
+  // option was created. Each sweep revives failures older than half an hour.
+  // This cannot duplicate anything: a job only reaches 'failed' after the CRM
+  // answered 4xx, which means it rejected the record rather than storing it.
+  // An ambiguous outcome becomes 'uncertain' instead, and that is left alone.
+  // ponytail: a payload the CRM will never accept cycles once per sweep forever;
+  // last_error names it on /ops, which is cheaper than silently losing leads.
+  await sql()`UPDATE alo.crm_outbox SET status='pending',attempts=0,next_attempt_at=now(),updated_at=now()
+    WHERE status='failed' AND updated_at<now()-interval '30 minutes'`;
   const rows=await sql()<Array<{entry_id:string}>>`SELECT DISTINCT entry_id FROM alo.crm_outbox WHERE status='pending' AND next_attempt_at<=now() ORDER BY entry_id LIMIT ${limit}`;
   for(const row of rows)await flushEntryCrm(row.entry_id);
   return {processed:rows.length,configured:true};
