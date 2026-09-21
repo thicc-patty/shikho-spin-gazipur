@@ -192,7 +192,7 @@
    catches a frame mid-sweep. Only `translate` is animated (the compositor handles
    it without repainting); the card's drop-shadow stays put, which keeps the
    result screen cheap on the low-end phones this runs on. */
-@keyframes gift-hover{from{translate:0 3px}to{translate:0 -3px}}
+@keyframes gift-hover{from{translate:0 4px}to{translate:0 -4px}}
 @keyframes gift-sheen{
   0%{transform:translateX(-135%) rotate(9deg);opacity:0}
   6%{opacity:1}
@@ -205,7 +205,7 @@
 .gift-display .gift-card::after{
   content:"";position:absolute;z-index:1;pointer-events:none;
   top:-30%;bottom:-30%;left:0;width:32%;
-  background:linear-gradient(100deg,#ffffff00,#ffffff1c 45%,#ffffff2b 50%,#ffffff1c 55%,#ffffff00);
+  background:linear-gradient(100deg,#ffffff00,#ffffff24 45%,#ffffff38 50%,#ffffff24 55%,#ffffff00);
   transform:translateX(-135%) rotate(9deg);opacity:0;
   animation:gift-sheen 7.5s ease-in-out 1.4s infinite;
 }
