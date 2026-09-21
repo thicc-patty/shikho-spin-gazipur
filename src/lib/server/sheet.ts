@@ -42,8 +42,14 @@ export async function mirrorToSheet(row: EntryRow) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body, signal: AbortSignal.timeout(8_000), cache: "no-store",
       });
-      if (response.ok) return;
-    } catch { /* fall through to the retry, then give up quietly */ }
+      // A 200 is not proof the row landed. An Apps Script web app that is not
+      // deployed for "Anyone" answers the POST with a sign-in page, status 200,
+      // so `response.ok` alone loses every entry in silence. Only the script's
+      // own {"ok":true} counts as written.
+      const reply = await response.text();
+      if (response.ok && reply.includes('"ok":true')) return;
+      console.error("Sheet mirror rejected", row.id, response.status, reply.slice(0, 300));
+    } catch (error) { console.error("Sheet mirror threw", row.id, String(error)); }
   }
   console.error("Sheet mirror failed", row.id);
 }
