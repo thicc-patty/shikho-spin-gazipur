@@ -7,7 +7,9 @@ import type { EntryRow } from "./entries";
 const CRM_BASE = process.env.CRM_API_BASE_URL || "https://crm-api.shikho.com/api/v1";
 const FORM_FIELD_ID = 536;
 const PRODUCT_ID = "1";
-const LEAD_CAMPAIGN = "S26_LGPA5_Spin";
+// The campaign now spans classes six to ten, so nothing here may say GPA5:
+// telesales reads these labels aloud when they call the student.
+const LEAD_CAMPAIGN = "S26_Spin";
 const LeadResponse = z.object({ id: z.coerce.number().int().positive(), prospect_id: z.string().uuid() });
 // Class eleven is what the original GPA5 entries carry; six to ten arrived with the school-class step.
 // Passing year follows the student's next board exam from the 2026 campaign year.
@@ -61,11 +63,11 @@ const RESULTS:Record<PrizeId,string>={
   bag:"SHIKHO_BAG",
 };
 export function crmFormValue(event:EventInfo) {
-  return `S26_LGPA5_Spin_${eventSlug(event.id)}`;
+  return `S26_Spin_${eventSlug(event.id)}`;
 }
 export function crmFormLabel(event:EventInfo) {
   const venue=eventSlug(event.id).replaceAll("_"," ");
-  return `S26 LGPA5 Spin - ${venue}`;
+  return `S26 Spin - ${venue}`;
 }
 export function leadPayload(row:EntryRow) {
   const group=GROUPS[row.study_group as StudyGroupId];

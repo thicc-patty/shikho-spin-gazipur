@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { CLASS_LEVELS, NO_GROUP, PRIZES, STUDY_GROUPS, firstName, needsStudyGroup, normalizePhone, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
+import { CLASS_LEVELS, MAX_SPINS, NO_GROUP, PRIZES, STUDY_GROUPS, bnSpinsLeft, firstName, needsStudyGroup, normalizePhone, prizeRank, wheelTarget, type EntryView, type EventInfo } from "@/lib/game";
 import { analyticsReady, flushAnalytics, track } from "@/lib/analytics-client";
 import { ResultJourney } from "./result-journey";
 import { Icon, PrizeArt } from "./icons";
@@ -51,6 +51,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     try {
       const data=await request("/api/session",{event:event.id});
       setReady(true);analyticsReady();
+      if(data.entry&&data.entry.prizeId&&data.entry.spinsLeft<=0){await fetch("/api/session",{method:"DELETE",headers:{"Content-Type":"application/json"},body:"{}"});return;}
       if(data.entry) { setEntry(data.entry);setName(data.entry.name);setGroup(data.entry.group);setClassLevel(data.entry.classLevel||"");setStep(data.entry.prizeId?"result":"wheel");window.history.replaceState({...window.history.state,alo:{step:data.entry.prizeId?"result":"wheel",form:0,result:0,run:historyRun.current}},"",window.location.pathname+window.location.search); }
     } catch {setError("সংযোগ হচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করো।");}
   },[event.id]);
@@ -72,11 +73,12 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
   },[record,demo]);
   useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);},[]);
   function navigate(next:Step,form=0,result=0){
-    if(entry?.prizeId&&next!=="result"){next="result";result=0;}
+    if(entry?.prizeId&&entry.spinsLeft<=0&&next!=="result"){next="result";result=0;}
     setError("");setMessage("");setStep(next);setFormPage(form);setResultPage(result);
     window.history.pushState({...window.history.state,alo:{step:next,form,result,run:historyRun.current}},"",`#${next}-${next==="register"?form+1:next==="result"?result+1:1}`);
   }
   function move(next:Step){navigate(next);}
+  function spinAgain(){setRotation(-12);rotationRef.current=-12;setDuration(0);navigate("wheel");}
   useEffect(()=>{
     window.history.replaceState({...window.history.state,alo:{step:"welcome",form:0,result:0,run:0}},"",window.location.pathname+window.location.search);
   },[]);
@@ -86,7 +88,7 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
       let next:Step=saved?.run===historyRun.current?saved.step:"welcome";
       if(!["welcome","register","wheel","result"].includes(next))next="welcome";
       if(spinLock.current)next="wheel";
-      else if(entry?.prizeId)next="result";
+      else if(entry?.prizeId&&entry.spinsLeft<=0)next="result";
       else if((next==="wheel"||next==="result")&&!entry)next="welcome";
       else if(next==="result")next="wheel";
       setStep(next);setFormPage(next==="register"?Math.min(2,Math.max(0,saved?.form||0)):0);
@@ -114,13 +116,13 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     if(!finalPage){navigate("register",page+1);return;}
     const studyGroup=groupNeeded?group:NO_GROUP;
     setBusy(true);setError("");
-    try{if(demo){setEntry({name:name.trim(),group:studyGroup,classLevel,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group:studyGroup,classLevel,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
+    try{if(demo){setEntry({name:name.trim(),group:studyGroup,classLevel,spinsLeft:MAX_SPINS,event,prizeId:null,code:null,wonAt:null,expiresAt:null,redeemedAt:null});move("wheel");return;}const data=await request("/api/register",{name,phone,group:studyGroup,classLevel,event:event.id,consent,turnstile:turnstile||undefined});setEntry(data.entry);move(data.entry.prizeId?"result":"wheel");}
     catch(err){setError(errors[err instanceof Error?err.message:""]||errors.unavailable);setTurnstile("");setTurnstileReset(value=>value+1);record("registration_error");}
     finally{setBusy(false);}
   }
   async function spin(speed=0.6) {
     if(spinLock.current||!entry)return;
-    if(entry.prizeId){move("result");return;}
+    if(entry.spinsLeft<=0){move("result");return;}
     spinLock.current=true;setSpinning(true);setError("");setMessage("তোমার চমক আসছে...");record("spin_started");
     const reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // Immediate movement acknowledges the gesture while the server commits the prize.
@@ -128,7 +130,8 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     setDuration(reduced?0:1800);setRotation(waitingAngle);rotationRef.current=waitingAngle;
     try {
       const data=await request(demo?"/api/demo/spin":"/api/spin",{});
-      const won:EntryView=demo?{...entry,prizeId:data.prizeId,code:createPrizeCode(entry.name,phone),wonAt:new Date().toISOString(),expiresAt:data.prizeId.startsWith("discount-")?new Date(Date.now()+72*3600_000).toISOString():null}:data.entry;
+      const kept=demo&&prizeRank(data.prizeId)<=prizeRank(entry.prizeId)?entry.prizeId!:data.prizeId;
+      const won:EntryView=demo?{...entry,prizeId:kept,spinsLeft:Math.max(0,entry.spinsLeft-1),code:entry.code||createPrizeCode(entry.name,phone),wonAt:entry.wonAt||new Date().toISOString(),expiresAt:kept.startsWith("discount-")?(entry.expiresAt||new Date(Date.now()+72*3600_000).toISOString()):null}:data.entry;
       const turns=5+Math.min(7,Math.floor(speed*3));
       const finish=wheelTarget(PRIZES.findIndex(p=>p.id===won.prizeId),rotationRef.current,turns);
       const ms=reduced?80:4600+Math.min(speed,3)*220;
@@ -153,6 +156,12 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
     d.rotation+=delta;d.angle=a;d.time=now;rotationRef.current=d.rotation;setRotation(d.rotation);
   }
   function pointerUp(e:PointerEvent<HTMLDivElement>){const d=drag.current;drag.current=null;if(d&&d.pointer===e.pointerId&&d.distance>14)void spin(d.velocity);}
+  // Staff hand the device on. The entry, prize and code stay in the database.
+  async function nextStudent(){
+    if(!demo)await fetch("/api/session",{method:"DELETE",headers:{"Content-Type":"application/json"},body:"{}"}).catch(()=>{});
+    restartDemo();
+    if(!demo){initialized.current=false;setReady(false);void restore();}
+  }
   function restartDemo(){historyRun.current++;setReplaying(true);setEntry(null);setName("");setPhone("");setGroup("");setClassLevel("");setConsent(false);setFieldErrors({});setFormPage(0);setRotation(-12);rotationRef.current=-12;setDuration(0);started.current=false;setStep("welcome");setResultPage(0);window.history.pushState({...window.history.state,alo:{step:"welcome",form:0,result:0,run:historyRun.current}},"","#welcome-1");}
   return <div className={`portal screen-journey step-${step}`} data-ready={ready}>
     <header className="site-header">
@@ -183,7 +192,6 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
           <div><h3>৩ জন জিতবে EduTab!</h3><p>স্পিন করলেই জাতীয় ড্র-তে এন্ট্রি।<br/>অক্টোবরের মাঝামাঝি লাইভ ড্র।</p></div>
           <Icon name="spark" size={27}/>
         </div>
-        <p className="event-footer">{event.name} · {new Date(event.date+"T00:00:00+06:00").toLocaleDateString("bn-BD",{day:"numeric",month:"long",timeZone:"Asia/Dhaka"})}</p>
       </section>}
       {step==="register"&&<section className="form-layout">
         <div className="form-intro"><button className="text-button back" onClick={()=>window.history.back()}><Icon name="back" size={19}/> ফিরে যাও</button>
@@ -223,12 +231,11 @@ export function Journey({ event, demo=false,turnstileSiteKey="" }: { event:Event
           <p className="spin-instruction" aria-live="polite">{spinning?message:"চাকায় সোয়াইপ করো, অথবা..."}</p>
           {error&&<p className="error-notice" role="alert">{error}</p>}
           <button className="button primary" onClick={()=>void spin()} disabled={spinning}>{spinning?<><span className="loading-spinner"/>চমক আসছে...</>:<>চাকা ঘোরাও <Icon name="spark"/></>}</button>
-          <p className="micro muted">স্পিন করলেই জাতীয় EduTab ড্র-তে এন্ট্রি।</p>
+          <p className="micro muted">{entry&&entry.spinsLeft<MAX_SPINS?bnSpinsLeft(entry.spinsLeft):"স্পিন করলেই জাতীয় EduTab ড্র-তে এন্ট্রি।"}</p>
         </div>
       </section>}
-      {step==="result"&&entry&&entry.prizeId&&<ResultJourney entry={entry} demo={demo} record={record} onReplay={restartDemo} page={resultPage} onPageChange={page=>navigate("result",0,page)} onBack={()=>window.history.back()}/>}
+      {step==="result"&&entry&&entry.prizeId&&<ResultJourney entry={entry} demo={demo} record={record} onReplay={()=>void nextStudent()} onSpinAgain={spinAgain} page={resultPage} onPageChange={page=>navigate("result",0,page)} onBack={()=>window.history.back()}/>}
       {step==="welcome"&&error&&<div className="connection-note" role="status">{error}<button className="text-button" onClick={()=>void restore()}>আবার চেষ্টা করো</button></div>}
     </main>
-    <footer className="site-footer"><span>সাফল্যের আনন্দে, শিখো তোমার সাথে।</span><span>শিখো × প্রথম আলো</span></footer>
   </div>;
 }

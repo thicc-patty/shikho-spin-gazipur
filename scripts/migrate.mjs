@@ -8,5 +8,6 @@ try {
   await db.unsafe(readFileSync(new URL("../sql/004-class-level.sql", import.meta.url), "utf8"));
   await db.unsafe(readFileSync(new URL("../sql/005-gazipur.sql", import.meta.url), "utf8"));
   await db.unsafe(readFileSync(new URL("../sql/006-analytics-session-index.sql", import.meta.url), "utf8"));
+  await db.unsafe(readFileSync(new URL("../sql/007-spins.sql", import.meta.url), "utf8"));
   console.log("Shikho Alo schema ready.");
 } finally { await db.end(); }

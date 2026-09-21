@@ -34,9 +34,17 @@ export const PRIZES = [
 ] as const;
 export type PrizeId = (typeof PRIZES)[number]["id"];
 export const PRIZE_BY_ID = new Map(PRIZES.map(p => [p.id, p]));
+/** Each phone gets three spins and keeps the best of them, never a downgrade. */
+export const MAX_SPINS = 3;
+const PRIZE_RANK: Record<PrizeId, number> = {
+  bag: 100, book: 90, "discount-60": 60, "discount-50": 50,
+  "discount-40": 40, "discount-30": 30, "discount-20": 20,
+};
+export const prizeRank = (id: PrizeId | null) => (id ? PRIZE_RANK[id] : -1);
+export const bnSpinsLeft = (left: number) => `${bn(left)}টি সুযোগ বাকি`;
 export const COMMUNITY_URL = "https://www.facebook.com/groups/shikhocommunity";
 export const APP_URL = "https://play.google.com/store/apps/details?id=tech.shikho.android&hl=en";
-export const CAMPAIGN = "gpa5-2026";
+export const CAMPAIGN = "spin-2026";
 export const bn = (value: number | string) => String(value).replace(/\d/g, d => "০১২৩৪৫৬৭৮৯"[Number(d)]);
 export function normalizePhone(raw: string): string | null {
   let digits = raw.replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/[\s()+-]/g, "");
@@ -47,7 +55,7 @@ export function normalizePhone(raw: string): string | null {
 }
 export type EventInfo = { id: string; city: string; name: string; date: string; crmReadyAt?: string | null };
 export type EntryView = {
-  name: string; group: string; classLevel: string; event: EventInfo; prizeId: PrizeId | null;
+  name: string; group: string; classLevel: string; spinsLeft: number; event: EventInfo; prizeId: PrizeId | null;
   code: string | null; wonAt: string | null; expiresAt: string | null; redeemedAt: string | null;
 };
 export function wheelTarget(index: number, current: number, turns: number) {

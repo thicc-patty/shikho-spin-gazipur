@@ -1,0 +1,46 @@
+import "server-only";
+import { CLASS_BY_ID, PRIZE_BY_ID, STUDY_GROUPS, type ClassLevelId, type PrizeId, type StudyGroupId } from "../game";
+import type { EntryRow } from "./entries";
+
+/**
+ * Live mirror of every entry into a Google Sheet, as a backup to Postgres.
+ * The Sheet is written through an Apps Script web app, so no Google service
+ * account or OAuth token is needed: SHEET_WEBHOOK_URL is the whole secret.
+ * Unset means disabled, exactly like CRM_TOKEN.
+ *
+ * ponytail: fire-and-forget with one retry. The Sheet is a convenience copy,
+ * never the source of truth, so a failed write must never fail a student's
+ * spin. If the Sheet ever has to be authoritative, move it into crm_outbox
+ * so it inherits the durable queue and retry schedule.
+ */
+const groupLabel = (id: string) => STUDY_GROUPS.find(g => g.id === (id as StudyGroupId))?.bn || id;
+
+export function sheetRow(row: EntryRow) {
+  return {
+    name: row.name,
+    phone: row.phone,
+    class: CLASS_BY_ID.get(row.class_level as ClassLevelId)?.bn || row.class_level,
+    group: row.study_group === "others" && row.class_level !== "c11" ? "" : groupLabel(row.study_group),
+    award: row.prize_id ? PRIZE_BY_ID.get(row.prize_id as PrizeId)?.title || row.prize_id : "",
+    code: row.prize_code || "",
+    event: row.event_info.city,
+    spins: row.spins,
+    wonAt: row.won_at ? new Date(row.won_at.getTime() + 6 * 3600_000).toISOString().slice(0, 19).replace("T", " ") : "",
+  };
+}
+
+export async function mirrorToSheet(row: EntryRow) {
+  const url = process.env.SHEET_WEBHOOK_URL;
+  if (!url) return;
+  const body = JSON.stringify(sheetRow(row));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body, signal: AbortSignal.timeout(8_000), cache: "no-store",
+      });
+      if (response.ok) return;
+    } catch { /* fall through to the retry, then give up quietly */ }
+  }
+  console.error("Sheet mirror failed", row.id);
+}

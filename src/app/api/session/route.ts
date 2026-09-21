@@ -22,3 +22,13 @@ export async function POST(req: Request) {
     return { ok: true, entry: entry ? entryView(entry) : null };
   });
 }
+
+// Hands the device to the next student. The entry, prize and code stay in the
+// database and in /ops; only this browser's claim on them is released.
+export async function DELETE(req: Request) {
+  return api(async () => {
+    await body(req);
+    (await cookies()).delete("alo_session");
+    return { ok: true };
+  });
+}

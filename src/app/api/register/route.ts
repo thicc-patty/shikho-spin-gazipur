@@ -6,6 +6,7 @@ import { sql } from "@/lib/server/db";
 import { api, ApiError, body, rateLimit, requireSession } from "@/lib/server/http";
 import { crmPayload, entryView, type EntryRow } from "@/lib/server/entries";
 import { flushEntryCrm } from "@/lib/server/crm";
+import { mirrorToSheet } from "@/lib/server/sheet";
 import { after } from "next/server";
 import { verifyTurnstile } from "@/lib/server/turnstile";
 const Input = z.object({ name: z.string().trim().min(2).max(80), phone: z.string().max(30),
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
       if (locked.entry_id) {
         const [saved] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE id=${locked.entry_id}`;
         if (saved.phone !== phone) throw new ApiError(409, "device_registered");
-        return { entryId:saved.id, entry:entryView(saved) };
+        return { entryId:saved.id, row:null, entry:entryView(saved) };
       }
       const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,class_level,event_id,event_info)
         VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${studyGroup},${data.data.classLevel},${event.id},${tx.json(event)})
@@ -38,9 +39,10 @@ export async function POST(req: Request) {
       await tx`UPDATE alo.sessions SET entry_id=${entry.id} WHERE id=${current.id}`;
       await tx`INSERT INTO alo.analytics(id,session_id,entry_id,event_id,name) VALUES (${randomUUID()},${current.id},${entry.id},${event.id},'registration_completed')`;
       await tx`INSERT INTO alo.crm_outbox(id,entry_id,kind,payload) VALUES (${randomUUID()},${entry.id},'lead.upsert',${tx.json(crmPayload(entry,"lead.upsert"))})`;
-      return { entryId:entry.id, entry:entryView(entry) };
+      return { entryId:entry.id, row:entry, entry:entryView(entry) };
     });
     after(()=>flushEntryCrm(result.entryId));
+    if(result.row)after(()=>mirrorToSheet(result.row!));
     return {ok:true,entry:result.entry};
   });
 }

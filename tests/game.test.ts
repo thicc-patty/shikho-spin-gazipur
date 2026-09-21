@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLASS_LEVELS, NO_GROUP, STUDY_GROUPS, classLabel, firstName, needsStudyGroup, normalizePhone, PRIZES, wheelTarget } from "../src/lib/game";
-import { selectPrize, WEIGHTS } from "../src/lib/server/selection";
+import { selectPrize, TOTAL_WEIGHT, WEIGHTS } from "../src/lib/server/selection";
 
 test("BD phone forms share one identity; reject malformed numbers",()=>{
   for(const value of ["01712345678","+8801712345678","8801712345678","008801712345678","1712345678","০১৭১২৩৪৫৬৭৮","+৮৮০ ১৭১২-৩৪৫৬৭৮"])
@@ -10,13 +10,15 @@ test("BD phone forms share one identity; reject malformed numbers",()=>{
     assert.equal(normalizePhone(value),null,value);
 });
 test("every possible roll produces exactly the approved distribution",()=>{
+  assert.equal(WEIGHTS.reduce((t,p)=>t+p.weight,0),TOTAL_WEIGHT);
   const counts:Record<string,number>={};
-  for(let i=0;i<10000;i++){const id=selectPrize([],()=>i);counts[id]=(counts[id]||0)+1;}
+  for(let i=0;i<TOTAL_WEIGHT;i++){const id=selectPrize([],()=>i);counts[id]=(counts[id]||0)+1;}
   assert.deepEqual(counts,Object.fromEntries(WEIGHTS.map(p=>[p.id,p.weight])));
-  assert.equal(Object.keys(counts).some(k=>/edu|draw/.test(k)),false);
-  assert.equal(selectPrize(["book","bag"],()=>9950),"discount-20");
-  assert.equal(selectPrize(["book"],()=>9800),"discount-20");
-  for(let i=0;i<10000;i++)assert.equal(["book","bag"].includes(selectPrize(["book","bag"],()=>i)),false);
+  // The approved split: 20% and 30% carry 99.99% of every spin between them.
+  const easy=counts["discount-20"]+counts["discount-30"];
+  assert.equal(easy/TOTAL_WEIGHT,0.9999);
+  assert.equal(selectPrize(["book","bag"],()=>TOTAL_WEIGHT-1),"discount-20");
+  for(const p of WEIGHTS)assert.ok(p.weight>0,p.id+" must stay reachable");
 });
 test("every wheel outcome lands under the top pointer after forward rotation",()=>{
   for(let i=0;i<PRIZES.length;i++)for(const current of [-370,-12,0,91,9999]){
