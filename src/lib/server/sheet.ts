@@ -13,12 +13,15 @@ import type { EntryRow } from "./entries";
  * spin. If the Sheet ever has to be authoritative, move it into crm_outbox
  * so it inherits the durable queue and retry schedule.
  */
+export const localPhone = (phone: string) => phone.replace(/^88/, "");
 const groupLabel = (id: string) => STUDY_GROUPS.find(g => g.id === (id as StudyGroupId))?.bn || id;
 
 export function sheetRow(row: EntryRow) {
   return {
     name: row.name,
-    phone: row.phone,
+    // Stored canonically as 8801XXXXXXXXX so every input form collides on one
+    // identity, but the stall and telesales read it back the way it was typed.
+    phone: localPhone(row.phone),
     class: CLASS_BY_ID.get(row.class_level as ClassLevelId)?.bn || row.class_level,
     group: row.study_group === "others" && row.class_level !== "c11" ? "" : groupLabel(row.study_group),
     award: row.prize_id ? PRIZE_BY_ID.get(row.prize_id as PrizeId)?.title || row.prize_id : "",

@@ -42,3 +42,16 @@ test("school class drives the CRM class and passing year",()=>{
   assert.equal(junior.cf_class,"C7");assert.equal(junior.cf_passing_year,"2030");assert.equal(junior.cf_group,"NONE");
   assert.throws(()=>leadPayload({...base,class_level:"c12"}),/Unsupported class level/);
 });
+
+test("the sheet shows the number as the student typed it, not the stored form",async()=>{
+  const {localPhone,sheetRow}=await import("../src/lib/server/sheet");
+  assert.equal(localPhone("8801813204758"),"01813204758");
+  assert.equal(localPhone("8801712345678"),"01712345678");
+  const row=sheetRow({...base,phone:"8801813204758",class_level:"c7",study_group:"others"});
+  assert.equal(row.phone,"01813204758");
+  assert.equal(row.phone.length,11);
+  // Classes below nine have no group yet, so the column stays empty rather than "অন্যান্য".
+  assert.equal(row.group,"");
+  // Storage and CRM keep the canonical form with the country code.
+  assert.equal(leadPayload({...base,phone:"8801813204758"}).mobile,"8801813204758");
+});
