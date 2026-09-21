@@ -21,7 +21,7 @@ test("a 200 that is not the script's own ok:true counts as a failed mirror", asy
     let calls = 0;
     globalThis.fetch = async () => { calls++; return new Response("<html>Sign in to continue</html>", { status: 200 }); };
     await mirrorToSheet(row);
-    assert.equal(calls, 2, "a rejected write is retried once");
+    assert.equal(calls, 1, "one attempt only; a retry would duplicate a write that may have landed");
     assert.ok(logged.some(a => String(a[0]).includes("rejected")), "the rejection is logged, not swallowed");
 
     calls = 0; logged.length = 0;

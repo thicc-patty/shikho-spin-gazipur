@@ -36,20 +36,22 @@ export async function mirrorToSheet(row: EntryRow) {
   const url = process.env.SHEET_WEBHOOK_URL;
   if (!url) return;
   const body = JSON.stringify(sheetRow(row));
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const response = await fetch(url, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body, signal: AbortSignal.timeout(8_000), cache: "no-store",
-      });
-      // A 200 is not proof the row landed. An Apps Script web app that is not
-      // deployed for "Anyone" answers the POST with a sign-in page, status 200,
-      // so `response.ok` alone loses every entry in silence. Only the script's
-      // own {"ok":true} counts as written.
-      const reply = await response.text();
-      if (response.ok && reply.includes('"ok":true')) return;
-      console.error("Sheet mirror rejected", row.id, response.status, reply.slice(0, 300));
-    } catch (error) { console.error("Sheet mirror threw", row.id, String(error)); }
-  }
-  console.error("Sheet mirror failed", row.id);
+  // One generous attempt, not two short ones. The Apps Script web app answers
+  // in well over 8s on a cold start, so the old 8s abort never saw the reply:
+  // it logged a failure and retried a write that had already landed, writing
+  // the same row twice. The row is a convenience copy and Postgres is the
+  // source of truth, so waiting once beats guessing twice.
+  try {
+    const response = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body, signal: AbortSignal.timeout(15_000), cache: "no-store",
+    });
+    // A 200 is not proof the row landed. An Apps Script web app that is not
+    // deployed for "Anyone" answers the POST with a sign-in page, status 200,
+    // so `response.ok` alone loses every entry in silence. Only the script's
+    // own {"ok":true} counts as written.
+    const reply = await response.text();
+    if (response.ok && reply.includes('"ok":true')) return;
+    console.error("Sheet mirror rejected", row.id, response.status, reply.slice(0, 300));
+  } catch (error) { console.error("Sheet mirror threw", row.id, String(error)); }
 }
