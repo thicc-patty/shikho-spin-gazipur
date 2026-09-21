@@ -44,7 +44,7 @@ export async function mirrorToSheet(row: EntryRow) {
   try {
     const response = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body, signal: AbortSignal.timeout(15_000), cache: "no-store",
+      body, signal: AbortSignal.timeout(25_000), cache: "no-store",
     });
     // A 200 is not proof the row landed. An Apps Script web app that is not
     // deployed for "Anyone" answers the POST with a sign-in page, status 200,
@@ -53,5 +53,9 @@ export async function mirrorToSheet(row: EntryRow) {
     const reply = await response.text();
     if (response.ok && reply.includes('"ok":true')) return;
     console.error("Sheet mirror rejected", row.id, response.status, reply.slice(0, 300));
-  } catch (error) { console.error("Sheet mirror threw", row.id, String(error)); }
+    // A timeout is not a lost row. The script commits the write before it
+    // answers, so an abort here usually means the Sheet is already correct and
+    // only the confirmation was missed — say so, or the next person to read this
+    // log goes hunting for a data loss that never happened.
+  } catch (error) { console.error("Sheet mirror unconfirmed", row.id, String(error)); }
 }
