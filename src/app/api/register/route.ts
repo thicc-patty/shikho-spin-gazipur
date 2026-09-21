@@ -40,7 +40,9 @@ export async function POST(req: Request) {
       if (locked.entry_id) {
         const [saved] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE id=${locked.entry_id}`;
         if (saved.phone !== phone) throw new ApiError(409, "device_registered");
-        return { entryId:saved.id, row:saved, entry:entryView(saved) };
+        const [refreshed] = await tx<EntryRow[]>`UPDATE alo.entries SET name=${data.data.name},
+          study_group=${studyGroup},class_level=${data.data.classLevel},updated_at=now() WHERE id=${saved.id} RETURNING *`;
+        return { entryId:refreshed.id, row:refreshed, entry:entryView(refreshed) };
       }
       const [entry] = await tx<EntryRow[]>`INSERT INTO alo.entries(id,campaign,phone,name,study_group,class_level,event_id,event_info)
         VALUES (${randomUUID()},${CAMPAIGN},${phone},${data.data.name},${studyGroup},${data.data.classLevel},${event.id},${tx.json(event)})
@@ -49,7 +51,14 @@ export async function POST(req: Request) {
       // same best prize, free to spin again. Without this, a student who came
       // back after the stall reset the device would be locked out for good.
       if (!entry) {
-        const [existing] = await tx<EntryRow[]>`SELECT * FROM alo.entries WHERE campaign=${CAMPAIGN} AND phone=${phone}`;
+        // Resume the phone's entry, but with the details just submitted. Keeping
+        // the stored ones meant the student who typed their own name was greeted
+        // by whoever registered that number first, handed that person's prize and
+        // told it was theirs. One entry per phone is the rule; showing a stranger
+        // their own name back is not part of it.
+        const [existing] = await tx<EntryRow[]>`UPDATE alo.entries SET name=${data.data.name},
+          study_group=${studyGroup},class_level=${data.data.classLevel},updated_at=now()
+          WHERE campaign=${CAMPAIGN} AND phone=${phone} RETURNING *`;
         await tx`UPDATE alo.sessions SET entry_id=${existing.id} WHERE id=${current.id}`;
         return { entryId:existing.id, row:existing, entry:entryView(existing) };
       }
