@@ -15,8 +15,13 @@ const poppins = Poppins({ subsets: ["latin"], variable: "--font-poppins", displa
 const shareTitle = "চাকা ঘোরাও, চমক জেতো! | শিখো স্পিন";
 const shareDescription = "ফ্রি স্পিনে জেতো HSC 28 কোর্সে ছাড়, ব্যাগ অথবা বই। সাথে থাকছে জাতীয় EduTab ড্র-তে এন্ট্রি!";
 const shareImage = { url: "/brand/shikho-spin-og-v1.jpg", width: 1200, height: 630, alt: "শিখো স্পিন: চাকা ঘোরাও, চমক জেতো! কোর্সে ছাড়, ব্যাগ, বই এবং পৃথক জাতীয় EduTab ড্র।" };
+// Share previews must resolve against this deployment's own domain, never a previous
+// campaign's. Vercel supplies the production hostname; SITE_URL overrides for a custom domain.
+const siteUrl = process.env.SITE_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
+  || "http://localhost:3300";
 export const metadata: Metadata = {
-  metadataBase: new URL("https://shikho-alo.vercel.app"),
+  metadataBase: new URL(siteUrl),
   title: shareTitle,
   description: shareDescription,
   applicationName: "শিখো স্পিন",
