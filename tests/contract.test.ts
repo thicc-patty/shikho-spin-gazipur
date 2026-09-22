@@ -166,11 +166,19 @@ test("the sql proxy hands multi-row fragments to the template untouched", async 
   const saved = process.env.DATABASE_URL;
   process.env.DATABASE_URL = "postgres://u:p@127.0.0.1:1/postgres";
   try {
-    const { sql } = await import("../src/lib/server/db");
+    const { sql, retryableConnect } = await import("../src/lib/server/db");
     const fragment = sql()([{ id: "a", name: "x" }], "id", "name") as unknown as object;
     // A promise here is the bug: postgres.js expands a fragment by checking
     // `instanceof Builder`, so a wrapped one is serialised as a bind parameter
     // and the INSERT becomes a syntax error.
     assert.equal(fragment.constructor.name, "Builder");
+
+    // A cold Neon is retried; anything that could already have run is not.
+    for (const code of ["CONNECT_TIMEOUT", "ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EAI_AGAIN"])
+      assert.equal(retryableConnect(Object.assign(new Error(code), { code })), true, code);
+    for (const code of ["CONNECTION_CLOSED", "CONNECTION_DESTROYED", "CONNECTION_ENDED", "42601"])
+      assert.equal(retryableConnect(Object.assign(new Error(code), { code })), false,
+        code + " may have reached the server, so retrying it could repeat a write");
+    assert.equal(retryableConnect(new Error("Database request timed out")), false);
   } finally { if (saved) process.env.DATABASE_URL = saved; else delete process.env.DATABASE_URL; }
 });
